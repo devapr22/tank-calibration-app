@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tank Details</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1 id="companyTitle">Tank Details</h1>
+    <p id="modeDescription"></p>
+
+    <div id="modeControls" style="margin-bottom:12px; display:flex; gap:12px; align-items:center;">
+        <label id="companySelectLabel" style="display:none;">Select Company</label>
+        <select id="companySelectForStrapping" style="display:none;"></select>
+
+        <label id="tankSelectLabel" style="display:none;">Select Tank</label>
+        <select id="tankSelectForDeadwood" style="display:none;"></select>
+
+        <button id="saveDeadwoodButton" style="display:none;">Save Deadwood</button>
+    </div>
+
+    <div id="deadwoodModeSection" style="display:none; margin-top:12px;"></div>
+
+    <div id="addModeSection" style="display:none;">
+        <div id="strappingActionSection" class="toggle-buttons" style="display:none; margin-bottom:12px; gap:8px; align-items:center;">
+            <button type="button" id="addTankModeBtn" class="mode-btn active" onclick="setStrappingAction('add')">Add Tank</button>
+            <button type="button" id="editTankModeBtn" class="mode-btn" onclick="setStrappingAction('edit')">Edit Tank</button>
+        </div>
+        <label id="strappingTankLabel" style="display:none; margin-bottom:6px;">Select Tank</label>
+        <select id="strappingTankSelect" style="display:none; min-width:220px; margin-bottom:12px;"></select>
+        <h2 id="strappingHeader">Add New Tank</h2>
+        <label id="tankNumberLabel">Tank Number</label>
+        <input type="text" id="tankNumber" placeholder="Tank Number">
+
+        <div style="display:flex; gap:30px; align-items:flex-end; flex-wrap:wrap; margin:10px 0;">
+            <div>
+                <label id="courseCountLabel" style="display:block; margin-bottom:6px;">Number of Courses</label>
+                <select id="courseCount" style="min-width:160px; padding:8px;"></select>
+            </div>
+            <div>
+                <label id="readingsPerCourseLabel" style="display:block; margin-bottom:6px;">Readings per Course</label>
+                <select id="readingsPerCourse" style="min-width:160px; padding:8px;"></select>
+            </div>
+        </div>
+
+        <div id="strappingFormInfo" style="display:none; margin:12px 0; font-weight:600;"></div>
+
+        <button onclick="prepareStrapping()">Create Strapping Table</button>
+
+        <div id="courseInputs"></div>
+
+        <p>
+            <button onclick="toggleDeadwood()" id="toggleDeadwoodBtn" style="margin-top:10px;">Show Deadwood</button>
+        </p>
+
+        <div id="deadwoodSection" style="display:none; margin-top:12px;"></div>
+        <!--<p id="volumeNote">Total Volume: <strong><span id="calculatedVolume">0.00</span></strong></p>-->
+
+        <button id="saveTankButton" onclick="saveTank()" style="display:none; margin-top: 10px;">Save Tank</button>
+    </div>
+
+    <div id="editModeSection" style="display:none;">
+        <h2>Existing Tanks</h2>
+        <div id="existingTankList"></div>
+
+        <div id="editTankSection" style="display:none; margin-top: 20px;">
+            <h2>Edit Tank</h2>
+            <label>Tank Number</label>
+            <input type="text" id="editTankNumber" placeholder="Tank Number">
+            <div id="editCourseInputs"></div>
+            <p>
+                <button onclick="toggleEditDeadwood()" id="toggleEditDeadwoodBtn" style="margin-top:10px;">Show Deadwood</button>
+            </p>
+            <div id="editDeadwoodSection" style="display:none; margin-top:12px;"></div>
+            <button onclick="updateTank()">Update Tank</button>
+            <button onclick="cancelTankEdit()" style="margin-left: 10px;">Cancel</button>
+        </div>
+    </div>
+
+    <div id="message" style="margin-top:20px;color:#333;"></div>
+    <button onclick="window.location.href='index.html'" style="margin-top:20px;">Home</button>
+</div>
+
+<script src="tank.js"></script>
+
+</body>
+</html>

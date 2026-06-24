@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Company Details - Tank Calibration App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div class="container">
+        <h1>Company Details</h1>
+
+        <h2>Add Company</h2>
+
+        <input type="text" id="companyName" placeholder="Company Name">
+
+        <input type="text" id="contactPerson" placeholder="Contact Person">
+
+        <input type="text" id="phoneNumber" placeholder="Phone Number">
+
+        <input type="text" id="location" placeholder="Location">
+
+        <button id="saveButton" onclick="addCompany()">
+            Save Company
+        </button>
+        <button id="cancelButton" onclick="cancelEdit()" style="display:none; margin-left: 10px;">
+            Cancel
+        </button>
+
+        <h2>Companies</h2>
+
+        <input type="text" id="companySearch" placeholder="Search company by name" oninput="searchCompanies()" style="width:100%; max-width:400px; margin-bottom:12px; padding:10px;">
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>Contact</th>
+                    <th>Phone</th>
+                    <th>Location</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody id="companyTable"></tbody>
+        </table>
+
+        <p style="margin-top:20px;"><button onclick="window.location.href='index.html'">Back</button></p>
+    </div>
+
+    <script src="script.js"></script>
+
+</body>
+</html>
