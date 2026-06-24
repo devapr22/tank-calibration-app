@@ -151,6 +151,175 @@ app.delete("/companies/:id", async (req, res) => {
         res.status(500).send("Error deleting company");
     }
 });
+// ── TANKS ──────────────────────────────────────────────
+
+app.post("/tanks", async (req, res) => {
+    try {
+        const { company_id, tank_number, course_count, readings_per_course } = req.body;
+        const result = await pool.query(
+            `INSERT INTO tanks (company_id, tank_number, course_count, readings_per_course)
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [company_id, tank_number, course_count, readings_per_course]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error creating tank");
+    }
+});
+
+app.get("/tanks/:companyId", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM tanks WHERE company_id = $1 ORDER BY tank_number`,
+            [req.params.companyId]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error fetching tanks");
+    }
+});
+
+app.put("/tanks/:id", async (req, res) => {
+    try {
+        const { tank_number, course_count, readings_per_course } = req.body;
+        const result = await pool.query(
+            `UPDATE tanks SET tank_number=$1, course_count=$2, readings_per_course=$3,
+              WHERE id=$4 RETURNING *`,
+            [tank_number, course_count, readings_per_course, req.params.id]
+        );
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error updating tank");
+    }
+});
+
+app.delete("/tanks/:id", async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM tanks WHERE id=$1`, [req.params.id]);
+        res.send("Tank deleted");
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error deleting tank");
+    }
+});
+
+// ── STRAPPING ──────────────────────────────────────────
+
+app.post("/strapping/:tankId", async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { courses } = req.body;
+        await client.query("BEGIN");
+        await client.query(`DELETE FROM strapping_readings WHERE tank_id=$1`, [req.params.tankId]);
+        for (const course of courses) {
+            for (const row of course.rows) {
+                await client.query(
+                    `INSERT INTO strapping_readings
+                     (tank_id, course_number, position, external_circumference, stepover,
+                      plate_thickness, temp_tape, correction_thickness, internal_circumference)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                    [req.params.tankId, course.courseNumber, row.position,
+                     row.externalCircumference, row.stepover, row.plateThickness,
+                     row.tempTape, row.correctionThickness, row.internalCircumference]
+                );
+            }
+        }
+        await client.query("COMMIT");
+        res.send("Strapping saved");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        console.error(error);
+        res.status(500).send("Error saving strapping");
+    } finally {
+        client.release();
+    }
+});
+
+app.get("/strapping/:tankId", async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT * FROM strapping_readings WHERE tank_id=$1 ORDER BY course_number`,
+            [req.params.tankId]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error fetching strapping");
+    }
+});
+
+// ── DEADWOODS ──────────────────────────────────────────
+
+app.post("/deadwood/:tankId", async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { horizontal, vertical } = req.body;
+        await client.query("BEGIN");
+        await client.query(`DELETE FROM deadwood_horizontal WHERE tank_id=$1`, [req.params.tankId]);
+        await client.query(`DELETE FROM deadwood_vertical WHERE tank_id=$1`, [req.params.tankId]);
+        for (const row of horizontal) {
+            await client.query(
+                `INSERT INTO deadwood_horizontal
+                 (tank_id, height_start, height_end, length, name, volume, litre_per_cm)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [req.params.tankId, row.heightStart, row.heightEnd,
+                 row.length, row.name, row.volume, row.litrePerCm]
+            );
+        }
+        for (const row of vertical) {
+            await client.query(
+                `INSERT INTO deadwood_vertical
+                 (tank_id, method, area, height_start, length, name, volume, litre_per_cm)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                [req.params.tankId, row.method, row.area, row.heightStart,
+                 row.length, row.name, row.volume, row.litrePerCm]
+            );
+        }
+        await client.query("COMMIT");
+        res.send("Deadwood saved");
+    } catch (error) {
+        await client.query("ROLLBACK");
+        console.error(error);
+        res.status(500).send("Error saving deadwood");
+    } finally {
+        client.release();
+    }
+});
+
+app.get("/deadwood/:tankId", async (req, res) => {
+    try {
+        const horizontal = await pool.query(
+            `SELECT * FROM deadwood_horizontal WHERE tank_id=$1`, [req.params.tankId]
+        );
+        const vertical = await pool.query(
+            `SELECT * FROM deadwood_vertical WHERE tank_id=$1`, [req.params.tankId]
+        );
+        res.json({ horizontal: horizontal.rows, vertical: vertical.rows });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error fetching deadwood");
+    }
+});
+
+// ── DASHBOARD COUNTS ───────────────────────────────────
+
+app.get("/counts", async (req, res) => {
+    try {
+        const tanks = await pool.query(`SELECT COUNT(*) FROM tanks`);
+        const horiz = await pool.query(`SELECT COUNT(*) FROM deadwood_horizontal`);
+        const vert = await pool.query(`SELECT COUNT(*) FROM deadwood_vertical`);
+        res.json({
+            tankCount: parseInt(tanks.rows[0].count),
+            deadwoodCount: parseInt(horiz.rows[0].count) + parseInt(vert.rows[0].count)
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error fetching counts");
+    }
+});
 app.listen(3000, () => {
     console.log("Server running on port 3000");
 });

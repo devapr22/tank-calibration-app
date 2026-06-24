@@ -1,10 +1,26 @@
 const selectedCompanyId = localStorage.getItem("selectedCompany");
 const tankMode = localStorage.getItem("tankMode");
 
-const companies = loadCompanies();
-let company = companies.find(c => String(c.id) === String(selectedCompanyId));
+let companies = [];
+let company = null;
 let editingTankId = null;
 let strappingAction = 'add';
+
+async function loadCompanies() {
+    const response = await fetch("http://localhost:3000/companies");
+    companies = await response.json();
+    // DB uses 'name' but tank.js uses 'companyName' — map it
+    companies = companies.map(c => ({ ...c, companyName: c.name, tanks: [] }));
+    company = companies.find(c => String(c.id) === String(selectedCompanyId)) || null;
+    // Load tanks for the selected company if there is one
+    if (company) {
+        const tanksRes = await fetch(`http://localhost:3000/tanks/${company.id}`);
+        company.tanks = await tanksRes.json();
+    }
+    initMode();
+}
+
+loadCompanies();
 
 // Initialize UI based on mode
 function initMode() {
@@ -60,21 +76,9 @@ function initMode() {
     populateCompanySelects();
 }
 
-initMode();
 
-function loadCompanies() {
-    const stored = JSON.parse(localStorage.getItem("companies")) || [];
-    stored.forEach(company => {
-        if (!Array.isArray(company.tanks)) {
-            company.tanks = [];
-        }
-    });
-    return stored;
-}
 
-function saveCompanies() {
-    localStorage.setItem("companies", JSON.stringify(companies));
-}
+
 
 function populateDropdowns() {
     const courseSelect = document.getElementById("courseCount");
@@ -188,31 +192,59 @@ function setStrappingAction(action) {
     }
 }
 
-function populateStrappingTankSelect(companyId) {
+async function populateStrappingTankSelect(companyId) {
     const tankSelect = document.getElementById('strappingTankSelect');
     if (!tankSelect) return;
     tankSelect.innerHTML = '';
+    const res = await fetch(`http://localhost:3000/tanks/${companyId}`);
+    const tanks = await res.json();
+    // also update this company's tanks in memory
     const comp = companies.find(c => String(c.id) === String(companyId));
-    if (!comp || !comp.tanks.length) {
+    if (comp) comp.tanks = tanks;
+
+    if (!tanks.length) {
         tankSelect.style.display = 'none';
-        if (strappingAction === 'edit') {
-            showMessage('No tanks available to edit for the selected company.', true);
-        }
+        if (strappingAction === 'edit') showMessage('No tanks available for this company.', true);
         return;
     }
-    comp.tanks.forEach(t => {
+    tanks.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.innerText = t.tankNumber;
+        opt.innerText = t.tank_number;
         tankSelect.appendChild(opt);
     });
-    tankSelect.onchange = () => {
+    tankSelect.onchange = async () => {
         const tankId = tankSelect.value;
-        const selectedTank = comp.tanks.find(t => String(t.id) === String(tankId));
-        if (selectedTank) {
-            loadTankIntoStrappingForm(selectedTank);
-            updateStrappingInfo();
-        }
+        // Fetch strapping and deadwood from DB
+        const [strappingRes, deadwoodRes] = await Promise.all([
+            fetch(`http://localhost:3000/strapping/${tankId}`),
+            fetch(`http://localhost:3000/deadwood/${tankId}`)
+        ]);
+        const strappingRows = await strappingRes.json();
+        const deadwood = await deadwoodRes.json();
+        const tank = tanks.find(t => String(t.id) === String(tankId));
+        // Convert DB rows back to the format renderStrappingTable expects
+        const courses = [];
+        strappingRows.forEach(row => {
+            let course = courses.find(c => c.courseNumber === row.course_number);
+            if (!course) { course = { courseNumber: row.course_number, rows: [] }; courses.push(course); }
+            course.rows.push({
+                position: row.position,
+                externalCircumference: row.external_circumference,
+                stepover: row.stepover,
+                plateThickness: row.plate_thickness,
+                tempTape: row.temp_tape,
+                correctionThickness: row.correction_thickness,
+                internalCircumference: row.internal_circumference
+            });
+        });
+        // Convert deadwood DB rows
+        const deadwoodFormatted = {
+            horizontal: deadwood.horizontal.map(r => ({ heightStart: r.height_start, heightEnd: r.height_end, length: r.length, name: r.name, volume: r.volume, litrePerCm: r.litre_per_cm })),
+            vertical: deadwood.vertical.map(r => ({ method: r.method, area: r.area, heightStart: r.height_start, length: r.length, name: r.name, volume: r.volume, litrePerCm: r.litre_per_cm }))
+        };
+        loadTankIntoStrappingForm({ ...tank, tankNumber: tank.tank_number, courseCount: tank.course_count, readingsPerCourse: tank.readings_per_course, courses, deadwood: deadwoodFormatted });
+        updateStrappingInfo();
     };
     if (strappingAction === 'edit') {
         tankSelect.style.display = 'inline-block';
@@ -222,7 +254,6 @@ function populateStrappingTankSelect(companyId) {
         }
     }
 }
-
 function updateStrappingInfo() {
     const info = document.getElementById('strappingFormInfo');
     if (!info) return;
@@ -303,28 +334,57 @@ function loadTankIntoStrappingForm(tank) {
     }
 }
 
-function populateTankSelectForDeadwood(companyId) {
+async function populateTankSelectForDeadwood(companyId) {
     const tankSel = document.getElementById('tankSelectForDeadwood');
     if (!tankSel) return;
     tankSel.innerHTML = '';
-    const comp = companies.find(c => String(c.id) === String(companyId));
-    if (!comp) return;
-    comp.tanks.forEach(t => {
+
+    const res = await fetch(`http://localhost:3000/tanks/${companyId}`);
+    const tanks = await res.json();
+
+    if (!tanks.length) {
+        tankSel.innerHTML = '<option>No tanks found</option>';
+        return;
+    }
+
+    tanks.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.innerText = t.tankNumber;
+        opt.innerText = t.tank_number;
         tankSel.appendChild(opt);
     });
-    tankSel.onchange = () => {
-        const tid = tankSel.value;
-        const tank = comp.tanks.find(tt => String(tt.id) === String(tid));
-        if (tank) {
-            renderDeadwoodSection('deadwoodModeSection', { horizontal: tank.deadwood?.horizontal || [], vertical: tank.deadwood?.vertical || [] });
-            const cont = document.getElementById('deadwoodModeSection');
-            if (cont) cont.style.display = 'block';
-        }
+
+    tankSel.onchange = async () => {
+        const tankId = tankSel.value;
+        const deadwoodRes = await fetch(`http://localhost:3000/deadwood/${tankId}`);
+        const deadwood = await deadwoodRes.json();
+
+        const deadwoodFormatted = {
+            horizontal: deadwood.horizontal.map(r => ({
+                heightStart: r.height_start,
+                heightEnd: r.height_end,
+                length: r.length,
+                name: r.name,
+                volume: r.volume,
+                litrePerCm: r.litre_per_cm
+            })),
+            vertical: deadwood.vertical.map(r => ({
+                method: r.method,
+                area: r.area,
+                heightStart: r.height_start,
+                length: r.length,
+                name: r.name,
+                volume: r.volume,
+                litrePerCm: r.litre_per_cm
+            }))
+        };
+
+        renderDeadwoodSection('deadwoodModeSection', deadwoodFormatted);
+        const cont = document.getElementById('deadwoodModeSection');
+        if (cont) cont.style.display = 'block';
     };
-    // trigger change to load first tank
+
+    // Auto-load first tank
     if (tankSel.options.length) {
         tankSel.value = tankSel.options[0].value;
         tankSel.onchange();
@@ -817,7 +877,7 @@ function isDuplicateTankNumber(targetCompany, tankNumber, ignoreTankId = null) {
     });
 }
 
-function saveTank() {
+async function saveTank() {
     try {
         const strappingTankSelect = document.getElementById('strappingTankSelect');
         const tankNumberInput = document.getElementById("tankNumber");
@@ -826,140 +886,201 @@ function saveTank() {
         const readingsPerCourse = parseInt(document.getElementById("readingsPerCourse").value, 10);
         const courses = getStrappingData("courseInputs");
 
-        // determine target company (strapping mode might use the company select)
         let targetCompany = company;
         const compSelect = document.getElementById('companySelectForStrapping');
         if (compSelect && compSelect.value) {
-            const cid = compSelect.value;
-            const found = companies.find(c => String(c.id) === String(cid));
+            const found = companies.find(c => String(c.id) === String(compSelect.value));
             if (found) targetCompany = found;
         }
-        if (!targetCompany) {
-            showMessage('No target company selected.', true);
-            return;
-        }
+        if (!targetCompany) { showMessage('No target company selected.', true); return; }
 
         const action = tankMode === 'strapping' ? strappingAction : 'add';
+
+        // ── EDIT / UPDATE ──
         if (tankMode === 'strapping' && action === 'edit') {
             const selectedTankId = strappingTankSelect ? strappingTankSelect.value : null;
-            if (!selectedTankId) {
-                showMessage('Select a tank to edit.', true);
-                return;
-            }
-            const tank = targetCompany.tanks.find(t => String(t.id) === String(selectedTankId));
-            if (!tank) {
-                showMessage('Selected tank not found.', true);
-                return;
-            }
+            if (!selectedTankId) { showMessage('Select a tank to edit.', true); return; }
 
-            tank.courseCount = courseCount;
-            tank.readingsPerCourse = readingsPerCourse;
-            tank.courses = courses;
-            tank.deadwood = getDeadwoodData('deadwoodSection');
-            tank.updatedAt = new Date().toISOString();
+            // 1. Update tank header
+            await fetch(`http://localhost:3000/tanks/${selectedTankId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tank_number: tankNumber || undefined, course_count: courseCount, readings_per_course: readingsPerCourse })
+            });
 
-            saveCompanies();
+            // 2. Save strapping
+            await fetch(`http://localhost:3000/strapping/${selectedTankId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ courses })
+            });
+
+            // 3. Save deadwood
+            const deadwood = getDeadwoodData('deadwoodSection');
+            await fetch(`http://localhost:3000/deadwood/${selectedTankId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(deadwood)
+            });
+
             showMessage('Tank updated successfully.');
-            if (company && String(company.id) === String(targetCompany.id)) renderExistingTankList();
             editingTankId = null;
             clearStrappingForm();
             return;
         }
 
-        if (isDuplicateTankNumber(targetCompany, tankNumber)) {
-            showMessage('A tank with this number already exists for the selected company.', true);
-            return;
-        }
+        // ── ADD NEW ──
+        if (!tankNumber) { showMessage('Tank number is required.', true); return; }
 
-        // collect deadwood data if user added any (from add-mode deadwood section)
-        let deadwoodData = { horizontal: [], vertical: [] };
-        if (document.getElementById('deadwoodSection')) {
-            try { deadwoodData = getDeadwoodData('deadwoodSection'); } catch (e) { /* ignore */ }
-        }
+        // 1. Create tank
+        const tankRes = await fetch('http://localhost:3000/tanks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ company_id: targetCompany.id, tank_number: tankNumber, course_count: courseCount, readings_per_course: readingsPerCourse })
+        });
+        const newTank = await tankRes.json();
 
-        targetCompany.tanks.push({
-            id: Date.now(),
-            tankNumber,
-            courseCount,
-            readingsPerCourse,
-            courses,
-            deadwood: deadwoodData,
-            totalVolume: 0,
-            updatedAt: new Date().toISOString()
+        // 2. Save strapping
+        await fetch(`http://localhost:3000/strapping/${newTank.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courses })
         });
 
-        saveCompanies();
+        // 3. Save deadwood
+        let deadwoodData = { horizontal: [], vertical: [] };
+        try { deadwoodData = getDeadwoodData('deadwoodSection'); } catch (e) {}
+        await fetch(`http://localhost:3000/deadwood/${newTank.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(deadwoodData)
+        });
+
         showMessage("Tank saved successfully.");
         document.getElementById("tankNumber").value = "";
         document.getElementById("courseCount").value = "1";
         document.getElementById("readingsPerCourse").value = "3";
         document.getElementById("courseInputs").innerHTML = "";
-        // clear deadwood add-mode UI
         const dead = document.getElementById('deadwoodSection');
-        if (dead) {
-            dead.innerHTML = '';
-            dead.style.display = 'none';
-        }
+        if (dead) { dead.innerHTML = ''; dead.style.display = 'none'; }
         const deadBtn = document.getElementById('toggleDeadwoodBtn');
         if (deadBtn) deadBtn.innerText = 'Show Deadwood';
-
         document.getElementById("saveTankButton").style.display = "none";
+
     } catch (error) {
         showMessage(error.message, true);
     }
 }
 
-function renderExistingTankList() {
+async function renderExistingTankList() {
     const container = document.getElementById("existingTankList");
     container.innerHTML = "";
+
+    // Fetch tanks from DB
+    const res = await fetch(`http://localhost:3000/tanks/${company.id}`);
+    company.tanks = await res.json();
 
     if (!company.tanks.length) {
         container.innerHTML = "<p>No tanks available for this company.</p>";
         return;
     }
 
-    const rows = company.tanks.map(tank => `
-        <tr>
-            <td>${tank.tankNumber}</td>
-            <td>
-                <button onclick="editTank(${tank.id})">Edit</button>
-                <button onclick="deleteTank(${tank.id})" style="margin-left: 8px;">Delete</button>
-            </td>
-        </tr>
-    `).join("");
-
     container.innerHTML = `
+        <input type="text" id="tankSearch" placeholder="Search tank by number"
+            oninput="filterTankList()"
+            style="width:100%; max-width:400px; margin-bottom:12px; padding:10px;">
         <table>
             <thead>
                 <tr>
                     <th>Tank Number</th>
+                    <th>Courses</th>
+                    <th>Readings per Course</th>
                     <th>Action</th>
                 </tr>
             </thead>
-            <tbody>
-                ${rows}
-            </tbody>
+            <tbody id="tankTableBody"></tbody>
         </table>
     `;
+
+    renderTankRows(company.tanks);
 }
 
-function editTank(tankId) {
-    const tank = company.tanks.find(t => t.id === tankId);
-    if (!tank) {
-        showMessage("Tank not found.", true);
+function renderTankRows(tanks) {
+    const tbody = document.getElementById("tankTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    if (!tanks.length) {
+        tbody.innerHTML = `<tr><td colspan="4">No tanks found.</td></tr>`;
         return;
     }
 
+    tanks.forEach(tank => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${tank.tank_number}</td>
+                <td>${tank.course_count}</td>
+                <td>${tank.readings_per_course}</td>
+                <td>
+                    <button onclick="editTank(${tank.id})">Edit</button>
+                    <button onclick="deleteTank(${tank.id})" style="margin-left:8px;">Delete</button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function filterTankList() {
+    const query = document.getElementById("tankSearch")?.value.trim().toLowerCase() || "";
+    const filtered = company.tanks.filter(t =>
+        t.tank_number.toLowerCase().includes(query)
+    );
+    renderTankRows(filtered);
+}
+async function editTank(tankId) {
+    // Fetch strapping and deadwood from DB
+    const [strappingRes, deadwoodRes] = await Promise.all([
+        fetch(`http://localhost:3000/strapping/${tankId}`),
+        fetch(`http://localhost:3000/deadwood/${tankId}`)
+    ]);
+    const strappingRows = await strappingRes.json();
+    const deadwood = await deadwoodRes.json();
+
+    // Convert strapping rows to format renderStrappingTable expects
+    const courses = [];
+    strappingRows.forEach(row => {
+        let course = courses.find(c => c.courseNumber === row.course_number);
+        if (!course) { course = { courseNumber: row.course_number, rows: [] }; courses.push(course); }
+        course.rows.push({
+            position: row.position,
+            externalCircumference: row.external_circumference,
+            stepover: row.stepover,
+            plateThickness: row.plate_thickness,
+            tempTape: row.temp_tape,
+            correctionThickness: row.correction_thickness,
+            internalCircumference: row.internal_circumference
+        });
+    });
+
+    const deadwoodFormatted = {
+        horizontal: deadwood.horizontal.map(r => ({
+            heightStart: r.height_start, heightEnd: r.height_end,
+            length: r.length, name: r.name, volume: r.volume, litrePerCm: r.litre_per_cm
+        })),
+        vertical: deadwood.vertical.map(r => ({
+            method: r.method, area: r.area, heightStart: r.height_start,
+            length: r.length, name: r.name, volume: r.volume, litrePerCm: r.litre_per_cm
+        }))
+    };
+
+    const tank = company.tanks.find(t => t.id === tankId);
     editingTankId = tankId;
     document.getElementById("editTankSection").style.display = "block";
-    document.getElementById("editTankNumber").value = tank.tankNumber;
-    const readingsPerCourse = tank.readingsPerCourse || 3;
-    renderStrappingTable(tank.courseCount, readingsPerCourse, "editCourseInputs", tank.courses);
-    // render deadwood if present and show the section
-    renderDeadwoodSection("editDeadwoodSection", {
-        horizontal: tank.deadwood?.horizontal || [],
-        vertical: tank.deadwood?.vertical || []
-    });
+    document.getElementById("editTankNumber").value = tank.tank_number;
+
+    renderStrappingTable(tank.course_count, tank.readings_per_course, "editCourseInputs", courses);
+
+    renderDeadwoodSection("editDeadwoodSection", deadwoodFormatted);
     const editSection = document.getElementById('editDeadwoodSection');
     if (editSection) {
         editSection.style.display = 'block';
@@ -968,37 +1089,40 @@ function editTank(tankId) {
     }
 }
 
-function updateTank() {
-    if (!editingTankId) {
-        showMessage("No tank selected for update.", true);
-        return;
-    }
-
+async function updateTank() {
+    if (!editingTankId) { showMessage("No tank selected for update.", true); return; }
     try {
         const tankNumber = document.getElementById("editTankNumber").value.trim();
-        if (!tankNumber) {
-            showMessage("Tank number is required.", true);
-            return;
-        }
-
-        if (isDuplicateTankNumber(company, tankNumber, editingTankId)) {
-            showMessage('Another tank with this number already exists for this company.', true);
-            return;
-        }
+        if (!tankNumber) { showMessage("Tank number is required.", true); return; }
 
         const courses = getStrappingData("editCourseInputs");
-        const tank = company.tanks.find(t => t.id === editingTankId);
-        if (!tank) return;
 
-        tank.tankNumber = tankNumber;
-        tank.courses = courses;
-        // collect deadwood data from edit section if present
-        if (document.getElementById('editDeadwoodSection')) {
-            try { tank.deadwood = getDeadwoodData('editDeadwoodSection'); } catch (e) { tank.deadwood = { horizontal: [], vertical: [] }; }
-        }
-        tank.updatedAt = new Date().toISOString();
+        // 1. Update tank header
+        await fetch(`http://localhost:3000/tanks/${editingTankId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tank_number: tankNumber, course_count: courses.length, readings_per_course: company.tanks.find(t => t.id === editingTankId)?.readings_per_course || 3 })
+        });
 
-        saveCompanies();
+        // 2. Save strapping
+        await fetch(`http://localhost:3000/strapping/${editingTankId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courses })
+        });
+
+        // 3. Save deadwood
+        let deadwood = { horizontal: [], vertical: [] };
+        try { deadwood = getDeadwoodData('editDeadwoodSection'); } catch (e) {}
+        await fetch(`http://localhost:3000/deadwood/${editingTankId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(deadwood)
+        });
+
+        // Reload tanks for this company and re-render
+        const tanksRes = await fetch(`http://localhost:3000/tanks/${company.id}`);
+        company.tanks = await tanksRes.json();
         renderExistingTankList();
         showMessage("Tank updated successfully.");
         cancelTankEdit();
@@ -1006,7 +1130,6 @@ function updateTank() {
         showMessage(error.message, true);
     }
 }
-
 function cancelTankEdit() {
     editingTankId = null;
     document.getElementById("editTankSection").style.display = "none";
@@ -1022,22 +1145,19 @@ function cancelTankEdit() {
     showMessage("");
 }
 
-function deleteTank(tankId) {
+async function deleteTank(tankId) {
     const confirmed = confirm("Delete this tank?");
     if (!confirmed) return;
-
-    const tankIndex = company.tanks.findIndex(t => t.id === tankId);
-    if (tankIndex === -1) return;
-
-    company.tanks.splice(tankIndex, 1);
-    saveCompanies();
-    renderExistingTankList();
-
-    if (editingTankId === tankId) {
-        cancelTankEdit();
+    try {
+        await fetch(`http://localhost:3000/tanks/${tankId}`, { method: 'DELETE' });
+        const tanksRes = await fetch(`http://localhost:3000/tanks/${company.id}`);
+        company.tanks = await tanksRes.json();
+        renderExistingTankList();
+        if (editingTankId === tankId) cancelTankEdit();
+        showMessage("Tank deleted successfully.");
+    } catch (error) {
+        showMessage("Error deleting tank", true);
     }
-
-    showMessage("Tank deleted successfully.");
 }
 
 function showMessage(text, isError = false) {
@@ -1050,23 +1170,20 @@ function goBack() {
     window.location.href = "index.html";
 }
 
-function saveDeadwoodForSelectedTank() {
-    const compSel = document.getElementById('companySelectForStrapping');
+async function saveDeadwoodForSelectedTank() {
     const tankSel = document.getElementById('tankSelectForDeadwood');
-    if (!compSel || !tankSel) {
-        showMessage('Select company and tank first.', true);
-        return;
-    }
-    const comp = companies.find(c => String(c.id) === String(compSel.value));
-    if (!comp) { showMessage('Company not found.', true); return; }
-    const tank = comp.tanks.find(t => String(t.id) === String(tankSel.value));
-    if (!tank) { showMessage('Tank not found.', true); return; }
+    if (!tankSel) { showMessage('Select a tank first.', true); return; }
+    const tankId = tankSel.value;
+    if (!tankId) { showMessage('Select a tank first.', true); return; }
 
     try {
         const data = getDeadwoodData('deadwoodModeSection');
-        tank.deadwood = data;
-        saveCompanies();
-        showMessage('Deadwood saved to tank.');
+        await fetch(`http://localhost:3000/deadwood/${tankId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        showMessage('Deadwood saved successfully.');
     } catch (e) {
         showMessage(e.message, true);
     }
