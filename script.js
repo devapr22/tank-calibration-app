@@ -185,7 +185,7 @@ function displayCompanies(filter = "") {
 
     const table =
         document.getElementById("companyTable");
-        if (!table) return;
+
     table.innerHTML = "";
 
     const normalizedFilter =
@@ -243,22 +243,23 @@ function openDeadwoods(){
     window.location.href = 'tank.html';
 }
 
-async function updateDashboardCounts() {
+function updateDashboardCounts() {
+    const countCompanies = companies.length;
+    const countTanks = companies.reduce((sum, company) => sum + (company.tanks?.length || 0), 0);
+    const countDeadwoods = companies.reduce((sum, company) => {
+        return sum + company.tanks?.reduce((tankSum, tank) => {
+            const horizontal = tank.deadwood?.horizontal?.length || 0;
+            const vertical = tank.deadwood?.vertical?.length || 0;
+            return tankSum + horizontal + vertical;
+        }, 0) || 0;
+    }, 0);
+
     const companyCountEl = document.getElementById('companyCount');
     const tankCountEl = document.getElementById('tankCount');
     const deadwoodCountEl = document.getElementById('deadwoodCount');
-    if (!companyCountEl) return; // only run on index page
-
-    if (companyCountEl) companyCountEl.innerText = companies.length;
-
-    try {
-        const res = await fetch('http://localhost:3000/counts');
-        const data = await res.json();
-        if (tankCountEl) tankCountEl.innerText = data.tankCount;
-        if (deadwoodCountEl) deadwoodCountEl.innerText = data.deadwoodCount;
-    } catch (e) {
-        console.error(e);
-    }
+    if (companyCountEl) companyCountEl.innerText = countCompanies;
+    if (tankCountEl) tankCountEl.innerText = countTanks;
+    if (deadwoodCountEl) deadwoodCountEl.innerText = countDeadwoods;
 }
 
-loadCompanies().then(() => updateDashboardCounts());
+updateDashboardCounts();

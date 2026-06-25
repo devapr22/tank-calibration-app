@@ -488,30 +488,47 @@ function attachStrappingListeners(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    const inputs = container.querySelectorAll("input");
-    inputs.forEach((input, index) => {
-        input.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === "ArrowRight") {
-                event.preventDefault();
-                if (index < inputs.length - 1) {
-                    inputs[index + 1].focus();
-                    inputs[index + 1].select();
-                }
-            } else if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                if (index > 0) {
-                    inputs[index - 1].focus();
-                    inputs[index - 1].select();
-                }
-            }
-        });
+    const editableClasses = ['external-circumference', 'stepover', 'plate-thickness'];
 
-        input.addEventListener("input", () => {
-            if (input.classList.contains("external-circumference") ||
-                input.classList.contains("stepover") ||
-                input.classList.contains("plate-thickness")) {
-                updateGeneratedValues(containerId);
-            }
+    const allRows = Array.from(container.querySelectorAll('.strapping-row'));
+
+    allRows.forEach((row, rowIndex) => {
+        const editableInputs = editableClasses
+            .map(cls => row.querySelector(`input.${cls}`))
+            .filter(Boolean);
+
+        editableInputs.forEach((input, colIndex) => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const isLastCol = colIndex === editableInputs.length - 1;
+                    if (isLastCol) {
+                        // Move to first editable input of next row
+                        const nextRow = allRows[rowIndex + 1];
+                        if (nextRow) {
+                            const nextFirst = nextRow.querySelector(`input.${editableClasses[0]}`);
+                            if (nextFirst) { nextFirst.focus(); nextFirst.select(); }
+                        }
+                    } else {
+                        editableInputs[colIndex + 1].focus();
+                        editableInputs[colIndex + 1].select();
+                    }
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    if (colIndex < editableInputs.length - 1) {
+                        editableInputs[colIndex + 1].focus();
+                        editableInputs[colIndex + 1].select();
+                    }
+                } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    if (colIndex > 0) {
+                        editableInputs[colIndex - 1].focus();
+                        editableInputs[colIndex - 1].select();
+                    }
+                }
+            });
+
+            input.addEventListener('input', () => updateGeneratedValues(containerId));
         });
     });
 }
@@ -536,9 +553,9 @@ function updateGeneratedValues(containerId) {
         const correctionThickness = (plateThickness * 6.2832) / 1000;
         const internalCircumference = externalCircumference - (stepover + tempTape + correctionThickness);
 
-        tempTapeInput.value = tempTape.toFixed(5);
-        correctionInput.value = correctionThickness.toFixed(5);
-        internalInput.value = internalCircumference.toFixed(5);
+        tempTapeInput.value = tempTape.toFixed(6);
+        correctionInput.value = correctionThickness.toFixed(6);
+        internalInput.value = internalCircumference.toFixed(4);
     });
 }
 
@@ -618,32 +635,9 @@ function renderDeadwoodSection(containerId, existing = null) {
     `;
 
     // Attach calculation listeners for horizontal deadwood
+    // Attach calculation listeners for horizontal deadwood
     const hRows = container.querySelectorAll(`#${containerId}-horizontal tbody tr`);
-    hRows.forEach(tr => {
-        const inputsInRow = tr.querySelectorAll('input');
-        inputsInRow.forEach((input, idx) => {
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    if (idx < inputsInRow.length - 1) {
-                        inputsInRow[idx + 1].focus();
-                        inputsInRow[idx + 1].select();
-                    }
-                } else if (e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    if (idx > 0) {
-                        inputsInRow[idx - 1].focus();
-                        inputsInRow[idx - 1].select();
-                    }
-                }
-            });
-            if (input.classList.contains('hw-height-start') ||
-                input.classList.contains('hw-height-end') ||
-                input.classList.contains('hw-length')) {
-                input.addEventListener('input', () => calculateHorizontalDeadwood(tr));
-            }
-        });
-    });
+    hRows.forEach(tr => attachHorizontalRowListeners(tr));
 
     // Attach calculation listeners for vertical deadwood
     const vRows = container.querySelectorAll(`#${containerId}-vertical tbody tr`);
@@ -712,30 +706,51 @@ function addHorizontalRow(containerId) {
     const tbody = document.querySelector(`#${containerId}-horizontal tbody`);
     if (!tbody) return;
     tbody.insertAdjacentHTML('beforeend', horizontalRowHtml(containerId));
-    
-    // Attach listeners to the newly added row
     const newRow = tbody.lastElementChild;
-    const inputsInRow = newRow.querySelectorAll('input');
-    inputsInRow.forEach((input, idx) => {
+    attachHorizontalRowListeners(newRow);
+}
+
+function attachHorizontalRowListeners(tr) {
+    const editableCols = ['.hw-height-start', '.hw-height-end', '.hw-length', '.hw-name'];
+    const getEditableInputs = () => editableCols.map(cls => tr.querySelector(`input${cls}`)).filter(Boolean);
+
+    const getAllRows = () => {
+        const tbody = tr.closest('tbody');
+        return tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+    };
+
+    tr.querySelectorAll('input').forEach(input => {
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === 'ArrowRight') {
+            const editableInputs = getEditableInputs();
+            const colIndex = editableInputs.indexOf(input);
+            if (colIndex === -1) return;
+
+            if (e.key === 'Enter') {
                 e.preventDefault();
-                if (idx < inputsInRow.length - 1) {
-                    inputsInRow[idx + 1].focus();
-                    inputsInRow[idx + 1].select();
+                if (colIndex === editableInputs.length - 1) {
+                    const rows = getAllRows();
+                    const nextRow = rows[rows.indexOf(tr) + 1];
+                    if (nextRow) {
+                        const nextFirst = nextRow.querySelector(`input${editableCols[0]}`);
+                        if (nextFirst) { nextFirst.focus(); nextFirst.select(); }
+                    }
+                } else {
+                    editableInputs[colIndex + 1].focus();
+                    editableInputs[colIndex + 1].select();
                 }
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (colIndex < editableInputs.length - 1) { editableInputs[colIndex + 1].focus(); editableInputs[colIndex + 1].select(); }
             } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                if (idx > 0) {
-                    inputsInRow[idx - 1].focus();
-                    inputsInRow[idx - 1].select();
-                }
+                if (colIndex > 0) { editableInputs[colIndex - 1].focus(); editableInputs[colIndex - 1].select(); }
             }
         });
+
         if (input.classList.contains('hw-height-start') ||
             input.classList.contains('hw-height-end') ||
             input.classList.contains('hw-length')) {
-            input.addEventListener('input', () => calculateHorizontalDeadwood(newRow));
+            input.addEventListener('input', () => calculateHorizontalDeadwood(tr));
         }
     });
 }
@@ -773,17 +788,57 @@ function onVerticalMethodChange(select) {
 }
 
 function attachVerticalRowListeners(tr) {
-    const inputs = tr.querySelectorAll('input');
-    inputs.forEach((input, idx) => {
+    const methodSelect = tr.querySelector('.vw-method');
+    const isManual = () => methodSelect ? methodSelect.value === 'manual' : false;
+
+    const getEditableCols = () => isManual()
+        ? ['.vw-height-start', '.vw-length', '.vw-name', '.vw-volume']
+        : ['.vw-area', '.vw-height-start', '.vw-length', '.vw-name'];
+
+    const getEditableInputs = () => getEditableCols()
+        .map(cls => tr.querySelector(`input${cls}`))
+        .filter(Boolean);
+
+    const getAllRows = () => {
+        const tbody = tr.closest('tbody');
+        return tbody ? Array.from(tbody.querySelectorAll('tr')) : [];
+    };
+
+    tr.querySelectorAll('input').forEach(input => {
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === 'ArrowRight') {
+            const editableInputs = getEditableInputs();
+            const colIndex = editableInputs.indexOf(input);
+            if (colIndex === -1) return;
+
+            if (e.key === 'Enter') {
                 e.preventDefault();
-                if (idx < inputs.length - 1) { inputs[idx + 1].focus(); inputs[idx + 1].select(); }
+                const isLastCol = colIndex === editableInputs.length - 1;
+                if (isLastCol) {
+                    const rows = getAllRows();
+                    const rowIndex = rows.indexOf(tr);
+                    const nextRow = rows[rowIndex + 1];
+                    if (nextRow) {
+                        const firstCls = getEditableCols()[0];
+                        const nextFirst = nextRow.querySelector(`input${firstCls}`);
+                        if (nextFirst) { nextFirst.focus(); nextFirst.select(); }
+                    }
+                } else {
+                    editableInputs[colIndex + 1].focus();
+                    editableInputs[colIndex + 1].select();
+                }
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                const editableInputs2 = getEditableInputs();
+                const idx = editableInputs2.indexOf(input);
+                if (idx < editableInputs2.length - 1) { editableInputs2[idx + 1].focus(); editableInputs2[idx + 1].select(); }
             } else if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                if (idx > 0) { inputs[idx - 1].focus(); inputs[idx - 1].select(); }
+                const editableInputs2 = getEditableInputs();
+                const idx = editableInputs2.indexOf(input);
+                if (idx > 0) { editableInputs2[idx - 1].focus(); editableInputs2[idx - 1].select(); }
             }
         });
+
         if (input.classList.contains('vw-area') ||
             input.classList.contains('vw-length') ||
             input.classList.contains('vw-volume')) {
@@ -1210,8 +1265,8 @@ function calculateHorizontalDeadwood(row) {
     // Litre_per_cm = Volume_Litres / dia
     const litrePerCm = dia !== 0 ? volume / dia : 0;
 
-    volumeInput.value = volume.toFixed(4);
-    litrePerCmInput.value = litrePerCm.toFixed(4);
+    volumeInput.value = volume.toFixed(3);
+    litrePerCmInput.value = litrePerCm.toFixed(3);
 }
 
 function calculateVerticalDeadwood(row) {
@@ -1228,7 +1283,7 @@ function calculateVerticalDeadwood(row) {
     if (method === 'automatic') {
         const area = parseFloat(areaInput.value) || 0;
         volume = (area * length) / 1000;
-        volumeInput.value = volume.toFixed(4);
+        volumeInput.value = volume.toFixed(3);
     } else {
         // Manual: user enters volume directly, can be negative
         volume = parseFloat(volumeInput.value) || 0;
@@ -1236,5 +1291,5 @@ function calculateVerticalDeadwood(row) {
 
     // Litre_per_cm can be negative if volume is negative
     const litrePerCm = length !== 0 ? volume / length : 0;
-    litrePerCmInput.value = litrePerCm.toFixed(4);
+    litrePerCmInput.value = litrePerCm.toFixed(3);
 }

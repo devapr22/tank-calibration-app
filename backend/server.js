@@ -185,8 +185,7 @@ app.put("/tanks/:id", async (req, res) => {
     try {
         const { tank_number, course_count, readings_per_course } = req.body;
         const result = await pool.query(
-            `UPDATE tanks SET tank_number=$1, course_count=$2, readings_per_course=$3,
-              WHERE id=$4 RETURNING *`,
+            `UPDATE tanks SET tank_number=$1, course_count=$2, readings_per_course=$3 WHERE id=$4 RETURNING *`,
             [tank_number, course_count, readings_per_course, req.params.id]
         );
         res.json(result.rows[0]);
