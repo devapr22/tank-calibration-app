@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tank Details</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+
+    <div class="top-bar">
+        <button class="home-btn" onclick="window.location.href='index.html'" title="Home">&#8962;</button>
+        <h1>Tank Details</h1>
+    </div>
+
+    <!-- Step 1: Select Company -->
+    <div id="step1">
+        <h2>Select Company</h2>
+        <select id="companySelect" style="min-width:220px; padding:8px;" onchange="onCompanyChange()">
+            <option value="">-- Select Company --</option>
+        </select>
+    </div>
+
+    <!-- Step 2: Select Tank -->
+    <div id="step2" style="display:none; margin-top:16px;">
+        <h2>Select Tank</h2>
+        <select id="tankSelect" style="min-width:220px; padding:8px;" onchange="onTankChange()">
+            <option value="">-- Select Tank --</option>
+        </select>
+    </div>
+
+    <!-- Step 3: Enter Details -->
+    <div id="step3" style="display:none; margin-top:24px;">
+
+        <h2 id="tankTitle"></h2>
+
+        <!-- Datum and Crown -->
+        <div style="display:flex; gap:30px; flex-wrap:wrap; margin-bottom:20px;">
+            <div>
+                <label style="display:block; margin-bottom:6px;">Datum Height</label>
+                <input type="number" step="any" id="datumHeight" placeholder="Datum Height">
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:6px;">Datum Volume</label>
+                <input type="number" step="any" id="datumVolume" placeholder="Datum Volume">
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:6px;">Crown Height</label>
+                <input type="number" step="any" id="crownHeight" placeholder="Crown Height">
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:6px;">Crown Volume</label>
+                <input type="number" step="any" id="crownVolume" placeholder="Crown Volume">
+            </div>
+        </div>
+
+        <!-- Course Heights Table -->
+        <h3>Course Heights</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Course Number</th>
+                    <th>Course Height (cm)</th>
+                </tr>
+            </thead>
+            <tbody id="courseTable"></tbody>
+        </table>
+
+        <button onclick="saveDetails()" style="margin-top:20px;">Save</button>
+        <div id="message" style="margin-top:16px; color:#333;"></div>
+    </div>
+
+</div>
+<script src="tankdetails.js"></script>
+</body>
+</html>

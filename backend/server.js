@@ -319,6 +319,64 @@ app.get("/counts", async (req, res) => {
         res.status(500).send("Error fetching counts");
     }
 });
+
+app.get("/tanks/:id/details", async (req, res) => {
+    try {
+        const tankResult = await pool.query(
+            `SELECT id, tank_number, course_count, datum_height, datum_volume, crown_height, crown_volume
+             FROM tanks WHERE id = $1`,
+            [req.params.id]
+        );
+        const courseResult = await pool.query(
+            `SELECT course_number, course_height FROM tank_courses
+             WHERE tank_id = $1 ORDER BY course_number`,
+            [req.params.id]
+        );
+        res.json({ tank: tankResult.rows[0], courses: courseResult.rows });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+// ── TANK DETAILS (datum/crown + courses) ───────────────
+
+app.put("/tanks/:id/details", async (req, res) => {
+    try {
+        const { datum_height, datum_volume, crown_height, crown_volume } = req.body;
+        const result = await pool.query(
+            `UPDATE tanks SET datum_height=$1, datum_volume=$2, crown_height=$3, crown_volume=$4 WHERE id=$5 RETURNING *`,
+            [datum_height, datum_volume, crown_height, crown_volume, req.params.id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error updating tank details");
+    }
+});
+
+app.post("/tanks/:id/courses", async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { courses } = req.body;
+        await client.query("BEGIN");
+        await client.query(`DELETE FROM tank_courses WHERE tank_id=$1`, [req.params.id]);
+        for (const course of courses) {
+            await client.query(
+                `INSERT INTO tank_courses (tank_id, course_number, course_height)
+                 VALUES ($1, $2, $3)`,
+                [req.params.id, course.course_number, course.course_height]
+            );
+        }
+        await client.query("COMMIT");
+        res.send("Courses saved");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        console.error(err);
+        res.status(500).send("Error saving courses");
+    } finally {
+        client.release();
+    }
+});
 app.listen(3000, () => {
     console.log("Server running on port 3000");
 });

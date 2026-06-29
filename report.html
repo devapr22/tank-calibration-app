@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tank Calibration Report</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; }
+
+        .screen-ui { padding: 32px 24px; max-width: 960px; margin: 0 auto; }
+        .screen-ui h2 { font-size: 1.4rem; margin-bottom: 20px; color: #1a3a5c; }
+
+        .select-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+        .select-row select {
+            flex: 1; min-width: 200px; padding: 10px 14px;
+            font-size: 1rem; border: 1px solid #ccc; border-radius: 6px; background: #fff;
+        }
+        .btn-row { display: flex; gap: 12px; margin-bottom: 28px; }
+
+        button {
+            padding: 10px 24px; font-size: 0.95rem;
+            border: none; border-radius: 6px; cursor: pointer;
+        }
+        #btnHome   { background: #e8edf3; color: #1a3a5c; }
+        #btnPrint  { background: #1a3a5c; color: #fff; }
+        #btnPrint:disabled { background: #aaa; cursor: not-allowed; }
+
+        #statusMsg { font-size: 0.9rem; color: #c0392b; margin-top: 8px; min-height: 20px; }
+
+        #reportWrapper { display: none; }
+        #reportWrapper.visible { display: block; }
+
+        .report-preview {
+            background: #fff; border: 1px solid #ccc; border-radius: 8px;
+            padding: 28px 32px; max-width: 960px; margin: 0 auto;
+        }
+
+        .report-table {
+            width: 100%; border-collapse: collapse;
+            font-size: 0.85rem; margin-bottom: 32px; border: 2px solid #333;
+        }
+        .report-table th, .report-table td {
+            border: 1px solid #333; padding: 5px 8px; text-align: center;
+        }
+        .report-table th { background: #f0f0f0; font-weight: bold; }
+
+        .section-title {
+            text-align: center; font-weight: bold;
+            font-size: 1rem; padding: 6px 0; background: #fff;
+        }
+        .report-meta {
+            display: flex; justify-content: space-between;
+            margin-bottom: 6px; font-size: 0.88rem; font-weight: bold;
+        }
+        td.label-cell { text-align: left; font-weight: bold; }
+
+        @media print {
+            body { background: #fff; }
+            .screen-ui { display: none !important; }
+            #reportWrapper { display: block !important; }
+            .report-preview { border: none; padding: 0; border-radius: 0; box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="screen-ui">
+    <div class="btn-row">
+        <button id="btnHome" onclick="window.location.href='index.html'">🏠 Home</button>
+    </div>
+    <h2>Tank Calibration Report</h2>
+    <div class="select-row">
+        <select id="companySelect" onchange="onCompanyChange()">
+            <option value="">-- Select Company --</option>
+        </select>
+        <select id="tankSelect" onchange="onTankChange()" style="display:none">
+            <option value="">-- Select Tank --</option>
+        </select>
+    </div>
+    <div class="btn-row">
+        <button id="btnPrint" disabled onclick="window.print()">🖨️ Print Report</button>
+    </div>
+    <div id="statusMsg"></div>
+</div>
+
+<!-- Full Report -->
+<div id="reportWrapper">
+    <div class="report-preview">
+
+        <!-- SECTION 1: STRAPPING -->
+        <div class="report-meta">
+            <span id="rptCompany1"></span>
+            <span id="rptTankNo1"></span>
+        </div>
+        <table class="report-table">
+            <thead>
+                <tr><td colspan="7" class="section-title">Strapping Details</td></tr>
+                <tr>
+                    <th>Course No</th>
+                    <th>External Circumference [m]</th>
+                    <th>Step Over Corrections [m]</th>
+                    <th>Plate Thickness [mm]</th>
+                    <th>Temperature Corrections [m]</th>
+                    <th>Thickness Corrections [m]</th>
+                    <th>Internal Circumference [m]</th>
+                </tr>
+            </thead>
+            <tbody id="strappingBody"></tbody>
+        </table>
+
+        <!-- SECTION 2: DEADWOODS -->
+        <div class="report-meta">
+            <span id="rptCompany2"></span>
+            <span id="rptTankNo2"></span>
+        </div>
+        <table class="report-table">
+            <thead>
+                <tr><td colspan="6" class="section-title">Horizontal Deadwoods</td></tr>
+                <tr>
+                    <th>Start Height [cm]</th>
+                    <th>End Height [cm]</th>
+                    <th>Length [cm]</th>
+                    <th>Deadwood Name</th>
+                    <th>Volume [litre]</th>
+                    <th>litre/cm</th>
+                </tr>
+            </thead>
+            <tbody id="deadwoodHBody"></tbody>
+        </table>
+
+        <table class="report-table">
+            <thead>
+                <tr><td colspan="6" class="section-title">Vertical Deadwoods</td></tr>
+                <tr>
+                    <th>Start Height [cm]</th>
+                    <th>Length [cm]</th>
+                    <th>Area</th>
+                    <th>Deadwood Name</th>
+                    <th>Volume [litre]</th>
+                    <th>litre/cm</th>
+                </tr>
+            </thead>
+            <tbody id="deadwoodVBody"></tbody>
+        </table>
+
+        <!-- SECTION 3: OPEN CAPACITY -->
+        <div class="report-meta">
+            <span id="rptCompany3"></span>
+            <span id="rptTankNo3"></span>
+        </div>
+        <table class="report-table">
+            <thead>
+                <tr><td colspan="7" class="section-title">Open Capacity</td></tr>
+                <tr>
+                    <th>Course No</th>
+                    <th>Mean Internal Circumference [m]</th>
+                    <th>Course Height [cm]</th>
+                    <th id="cumColDatum" style="display:none">Cumulative Height from Datum [cm]</th>
+                    <th>Cumulative Height from Bottom [cm]</th>
+                    <th>litre/cm</th>
+                    <th>Volume [litre]</th>
+                </tr>
+            </thead>
+            <tbody id="openCapBody"></tbody>
+        </table>
+
+        <!-- SECTION 4: NET CAPACITY -->
+        <div class="report-meta">
+            <span id="rptCompany4"></span>
+            <span id="rptTankNo4"></span>
+        </div>
+        <table class="report-table">
+            <thead>
+                <tr><td colspan="5" class="section-title">Net Capacity</td></tr>
+                <tr>
+                    <th>Course No</th>
+                    <th>Open Capacity [litre]</th>
+                    <th>DeadWood [litre]</th>
+                    <th>Net Capacity [litre]</th>
+                    <th>Cumulative Capacity [litre]</th>
+                </tr>
+            </thead>
+            <tbody id="netCapBody"></tbody>
+        </table>
+
+    </div>
+</div>
+
+<script>
+const API = "http://localhost:3000";
+
+async function init() {
+    const res = await fetch(`${API}/companies`);
+    const companies = await res.json();
+    const sel = document.getElementById('companySelect');
+    companies.forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.innerText = c.name;
+        sel.appendChild(o);
+    });
+}
+
+async function onCompanyChange() {
+    const companyId = document.getElementById('companySelect').value;
+    const tankSel = document.getElementById('tankSelect');
+    tankSel.innerHTML = '<option value="">-- Select Tank --</option>';
+    tankSel.style.display = 'none';
+    hideReport();
+    if (!companyId) return;
+    const res = await fetch(`${API}/tanks/${companyId}`);
+    const tanks = await res.json();
+    tanks.forEach(t => {
+        const o = document.createElement('option');
+        o.value = t.id; o.innerText = t.tank_number;
+        tankSel.appendChild(o);
+    });
+    tankSel.style.display = 'block';
+}
+
+async function onTankChange() {
+    const tankId = document.getElementById('tankSelect').value;
+    hideReport();
+    if (!tankId) return;
+
+    const msg = document.getElementById('statusMsg');
+    msg.textContent = 'Loading...';
+
+    try {
+        const [detRes, strRes, dwRes] = await Promise.all([
+            fetch(`${API}/tanks/${tankId}/details`),
+            fetch(`${API}/strapping/${tankId}`),
+            fetch(`${API}/deadwood/${tankId}`)
+        ]);
+        const detData      = await detRes.json();
+        const strappingRows = await strRes.json();
+        const deadwoodData  = await dwRes.json();
+
+        const tank    = detData.tank;
+        const courses = detData.courses;
+
+        if (!courses || courses.length === 0) {
+            msg.textContent = 'No course heights saved for this tank yet.'; return;
+        }
+        if (!strappingRows || strappingRows.length === 0) {
+            msg.textContent = 'No strapping data saved for this tank yet.'; return;
+        }
+
+        msg.textContent = '';
+
+        const companyName = document.getElementById('companySelect').selectedOptions[0].text;
+        const tankLabel   = `Tank No: ${tank.tank_number}`;
+
+        ['1','2','3','4'].forEach(n => {
+            const co = document.getElementById(`rptCompany${n}`);
+            const tn = document.getElementById(`rptTankNo${n}`);
+            if (co) co.textContent = companyName;
+            if (tn) tn.textContent = tankLabel;
+        });
+
+        renderStrapping(strappingRows, tank.course_count);
+        renderDeadwoods(deadwoodData);
+        const openCapRows = renderOpenCapacity(tank, courses, strappingRows);
+        renderNetCapacity(tank, openCapRows, deadwoodData);
+
+        document.getElementById('reportWrapper').classList.add('visible');
+        document.getElementById('btnPrint').disabled = false;
+
+    } catch (e) {
+        msg.textContent = 'Error loading data.';
+        console.error(e);
+    }
+}
+
+/* ── STRAPPING ── */
+function renderStrapping(rows, courseCount) {
+    const tbody = document.getElementById('strappingBody');
+    tbody.innerHTML = '';
+    const posOrder = { 'Top': 0, 'Middle': 1, 'Bottom': 2 };
+    const sorted = [...rows].sort((a, b) => {
+        if (b.course_number !== a.course_number) return b.course_number - a.course_number;
+        return (posOrder[a.position] ?? 1) - (posOrder[b.position] ?? 1);
+    });
+    sorted.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${r.course_number} ${r.position}</td>
+            <td>${parseFloat(r.external_circumference || 0).toFixed(3)}</td>
+            <td>${parseFloat(r.stepover || 0).toFixed(4)}</td>
+            <td>${parseFloat(r.plate_thickness || 0)}</td>
+            <td>${parseFloat(r.temp_tape || 0).toFixed(6)}</td>
+            <td>${parseFloat(r.correction_thickness || 0).toFixed(6)}</td>
+            <td>${parseFloat(r.internal_circumference || 0).toFixed(4)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+/* ── DEADWOODS ── */
+function renderDeadwoods(data) {
+    const hasHorizontal = data.horizontal && data.horizontal.length > 0;
+    const hasVertical   = data.vertical && data.vertical.length > 0;
+
+    // Horizontal table
+    const hTable = document.getElementById('deadwoodHBody').closest('table');
+    if (!hasHorizontal) {
+        hTable.style.display = 'none';
+    } else {
+        hTable.style.display = '';
+        const hBody = document.getElementById('deadwoodHBody');
+        hBody.innerHTML = '';
+        data.horizontal.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${r.height_start}</td>
+                <td>${r.height_end}</td>
+                <td>${r.length}</td>
+                <td>${r.name || ''}</td>
+                <td>${parseFloat(r.volume || 0).toFixed(3)}</td>
+                <td>${parseFloat(r.litre_per_cm || 0).toFixed(3)}</td>
+            `;
+            hBody.appendChild(tr);
+        });
+    }
+
+    // Vertical table
+    const vTable = document.getElementById('deadwoodVBody').closest('table');
+    if (!hasVertical) {
+        vTable.style.display = 'none';
+    } else {
+        vTable.style.display = '';
+        const vBody = document.getElementById('deadwoodVBody');
+        vBody.innerHTML = '';
+        data.vertical.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${r.height_start}</td>
+                <td>${r.length}</td>
+                <td>${r.area || ''}</td>
+                <td>${r.name || ''}</td>
+                <td>${parseFloat(r.volume || 0).toFixed(3)}</td>
+                <td>${parseFloat(r.litre_per_cm || 0).toFixed(3)}</td>
+            `;
+            vBody.appendChild(tr);
+        });
+    }
+
+    // Hide the section 2 meta header if both are empty
+    const meta2 = document.getElementById('rptCompany2').closest('.report-meta');
+    if (meta2) meta2.style.display = (!hasHorizontal && !hasVertical) ? 'none' : '';
+}
+/* ── OPEN CAPACITY ── */
+function computeMIC(strappingRows, courseNumber) {
+    const rows = strappingRows.filter(r => parseInt(r.course_number) === parseInt(courseNumber));
+    if (!rows.length) return null;
+    const sum = rows.reduce((acc, r) => acc + parseFloat(r.internal_circumference || 0), 0);
+    return sum / rows.length;
+}
+
+function renderOpenCapacity(tank, courses, strappingRows) {
+    const datumH = parseFloat(tank.datum_height || 0);
+    const datumV = parseFloat(tank.datum_volume || 0);
+    const crownH = parseFloat(tank.crown_height || 0);
+    const crownV = parseFloat(tank.crown_volume || 0);
+
+    const crownGtDatum = crownH > datumH;
+    const subtractH = crownGtDatum ? (crownH - datumH) : datumH;
+    const datumGtCrown = !crownGtDatum;
+
+    const sorted = [...courses].sort((a, b) => a.course_number - b.course_number);
+
+    const rowsData = [];
+    let cumulativeBottom = 0;
+    let cumulativeDatum  = 0;
+
+    sorted.forEach((c, idx) => {
+        const courseNo = c.course_number;
+        const actualH  = parseFloat(c.course_height || 0);
+        const mic      = computeMIC(strappingRows, courseNo);
+
+        let displayH = actualH;
+        if (idx === 0) displayH = actualH - subtractH;
+
+        cumulativeBottom += actualH;
+        cumulativeDatum  += displayH;
+
+        const cumulBottom = parseFloat(cumulativeBottom.toFixed(4));
+        const cumulDatum  = parseFloat(cumulativeDatum.toFixed(4));
+
+        let volume = null, litreCm = null;
+        if (mic !== null && displayH > 0) {
+            litreCm = 0.795752 * mic * mic;
+            volume  = litreCm * displayH;
+        }
+
+        rowsData.push({ courseNo, mic, actualH, displayH, cumulBottom, cumulDatum, volume, litreCm });
+    });
+
+    document.getElementById('cumColDatum').style.display = datumGtCrown ? '' : 'none';
+
+    const tbody = document.getElementById('openCapBody');
+    tbody.innerHTML = '';
+
+    [...rowsData].reverse().forEach(r => {
+        const tr = document.createElement('tr');
+        const heightDisplay = (r.courseNo === rowsData[0].courseNo)
+            ? r.displayH.toFixed(1)
+            : r.actualH.toFixed(1);
+        const datumCumCell = datumGtCrown ? `<td>${r.cumulDatum}</td>` : '';
+        tr.innerHTML = `
+            <td>${r.courseNo}</td>
+            <td>${r.mic !== null ? r.mic.toFixed(4) : '-'}</td>
+            <td>${heightDisplay}</td>
+            ${datumCumCell}
+            <td>${r.cumulBottom}</td>
+            <td>${r.litreCm !== null ? r.litreCm.toFixed(2) : '-'}</td>
+            <td>${r.volume !== null ? r.volume.toFixed(2) : '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    if (crownGtDatum) {
+        const crownFromDatum = crownH - datumH;
+        const crownVolFromDatum = crownV - datumV;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Crown from Datum</td>
+            <td>${crownFromDatum.toFixed(2)}</td><td></td><td></td>
+            <td>${crownVolFromDatum.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    const dtr = document.createElement('tr');
+    if (datumGtCrown) {
+        dtr.innerHTML = `
+            <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Datum From Bottom</td>
+            <td></td>
+            <td>${datumH}</td>
+            <td>${datumH}</td>
+            <td></td>
+            <td>${datumV.toFixed(2)}</td>
+        `;
+    } else {
+        dtr.innerHTML = `
+            <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Datum From Bottom</td>
+            <td>${datumH}</td>
+            <td>${datumH}</td>
+            <td></td>
+            <td>${datumV.toFixed(2)}</td>
+        `;
+    }
+    tbody.appendChild(dtr);
+
+    return rowsData;
+}
+
+/* ── NET CAPACITY ── */
+function getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd) {
+    let hVol = 0, vVol = 0;
+
+    (deadwoodData.horizontal || []).forEach(dw => {
+        const dwStart  = parseFloat(dw.height_start || 0);
+        const dwEnd    = parseFloat(dw.height_end || 0);
+        const dwVol    = parseFloat(dw.volume || 0);
+        const dwHeight = dwEnd - dwStart;
+        if (dwHeight <= 0 || dwVol === 0) return;
+        const overlapStart = Math.max(dwStart, courseStart);
+        const overlapEnd   = Math.min(dwEnd, courseEnd);
+        if (overlapEnd > overlapStart) {
+            hVol += dwVol * (overlapEnd - overlapStart) / dwHeight;
+        }
+    });
+
+    (deadwoodData.vertical || []).forEach(dw => {
+        const dwStart = parseFloat(dw.height_start || 0);
+        const dwLen   = parseFloat(dw.length || 0);
+        const dwEnd   = dwStart + dwLen;
+        const dwVol   = parseFloat(dw.volume || 0);
+        if (dwLen <= 0 || dwVol === 0) return;
+        const overlapStart = Math.max(dwStart, courseStart);
+        const overlapEnd   = Math.min(dwEnd, courseEnd);
+        if (overlapEnd > overlapStart) {
+            vVol += dwVol * (overlapEnd - overlapStart) / dwLen;
+        }
+    });
+
+    return { horizontal: hVol, vertical: vVol };
+}
+
+function renderNetCapacity(tank, openCapRows, deadwoodData) {
+    const tbody = document.getElementById('netCapBody');
+    tbody.innerHTML = '';
+
+    const crownH = parseFloat(tank.crown_height || 0);
+    const crownV = parseFloat(tank.crown_volume || 0);
+    const datumH = parseFloat(tank.datum_height || 0);
+    const datumV = parseFloat(tank.datum_volume || 0);
+    const crownGtDatum = crownH > datumH;
+    const baseVolume   = crownGtDatum ? crownV : datumV;
+
+    const netRows = [];
+
+    openCapRows.forEach((r, idx) => {
+        const courseStart = idx === 0 ? 0 : openCapRows[idx - 1].cumulBottom;
+        const courseEnd   = r.cumulBottom;
+        const openVol     = r.volume !== null ? r.volume : 0;
+        const dw          = getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd);
+        const deadwoodNet = dw.horizontal - dw.vertical;
+        const netVol      = openVol + deadwoodNet;
+        netRows.push({ courseNo: r.courseNo, openVol, deadwoodNet, netVol });
+    });
+
+    let runningCumul = 0;
+    netRows.forEach((r, idx) => {
+        if (idx === 0) {
+            runningCumul = r.netVol + baseVolume;
+        } else {
+            runningCumul += r.netVol;
+        }
+        r.cumulative = runningCumul;
+    });
+
+    [...netRows].reverse().forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${r.courseNo}</td>
+            <td>${r.openVol.toFixed(2)}</td>
+            <td>${r.deadwoodNet.toFixed(2)}</td>
+            <td>${r.netVol.toFixed(2)}</td>
+            <td>${r.cumulative.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    const label = crownGtDatum ? 'Volume up to Crown' : 'Volume up to Datum';
+    const lastRow = document.createElement('tr');
+    lastRow.innerHTML = `
+        <td colspan="3" class="label-cell">&nbsp;&nbsp;${label}</td>
+        <td>${baseVolume.toFixed(2)}</td>
+        <td></td>
+    `;
+    tbody.appendChild(lastRow);
+}
+
+function hideReport() {
+    document.getElementById('reportWrapper').classList.remove('visible');
+    document.getElementById('btnPrint').disabled = true;
+    ['strappingBody','deadwoodHBody','deadwoodVBody','openCapBody','netCapBody'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '';
+    });
+    // Reset deadwood table visibility
+    const hTable = document.getElementById('deadwoodHBody')?.closest('table');
+    const vTable = document.getElementById('deadwoodVBody')?.closest('table');
+    if (hTable) hTable.style.display = '';
+    if (vTable) vTable.style.display = '';
+}
+
+init();
+</script>
+</body>
+</html>
