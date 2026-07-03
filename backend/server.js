@@ -252,6 +252,29 @@ app.get("/strapping/:tankId", async (req, res) => {
 
 // ── DEADWOODS ──────────────────────────────────────────
 
+function computeHorizontalDeadwoodValues(row) {
+    const heightStart = parseFloat(row.heightStart) || 0;
+    const heightEnd = parseFloat(row.heightEnd) || 0;
+    const length = parseFloat(row.length) || 0;
+    const dia = heightEnd - heightStart;
+    const volume = dia > 0 && length > 0
+        ? (3.1416 * dia * dia * length) / 4000
+        : 0;
+    const litrePerCm = dia !== 0 ? volume / dia : 0;
+    return { volume, litrePerCm };
+}
+
+function computeVerticalDeadwoodValues(row) {
+    const method = row.method || 'automatic';
+    const area = parseFloat(row.area) || 0;
+    const length = parseFloat(row.length) || 0;
+    const volume = method === 'automatic'
+        ? (area * length) / 1000
+        : parseFloat(row.volume) || 0;
+    const litrePerCm = length !== 0 ? volume / length : 0;
+    return { volume, litrePerCm };
+}
+
 app.post("/deadwood/:tankId", async (req, res) => {
     const client = await pool.connect();
     try {
@@ -260,21 +283,23 @@ app.post("/deadwood/:tankId", async (req, res) => {
         await client.query(`DELETE FROM deadwood_horizontal WHERE tank_id=$1`, [req.params.tankId]);
         await client.query(`DELETE FROM deadwood_vertical WHERE tank_id=$1`, [req.params.tankId]);
         for (const row of horizontal) {
+            const { volume, litrePerCm } = computeHorizontalDeadwoodValues(row);
             await client.query(
                 `INSERT INTO deadwood_horizontal
                  (tank_id, height_start, height_end, length, name, volume, litre_per_cm)
                  VALUES ($1,$2,$3,$4,$5,$6,$7)`,
                 [req.params.tankId, row.heightStart, row.heightEnd,
-                 row.length, row.name, row.volume, row.litrePerCm]
+                 row.length, row.name, volume, litrePerCm]
             );
         }
         for (const row of vertical) {
+            const { volume, litrePerCm } = computeVerticalDeadwoodValues(row);
             await client.query(
                 `INSERT INTO deadwood_vertical
                  (tank_id, method, area, height_start, length, name, volume, litre_per_cm)
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
                 [req.params.tankId, row.method, row.area, row.heightStart,
-                 row.length, row.name, row.volume, row.litrePerCm]
+                 row.length, row.name, volume, litrePerCm]
             );
         }
         await client.query("COMMIT");

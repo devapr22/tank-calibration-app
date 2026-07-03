@@ -86,6 +86,9 @@
 <div id="reportWrapper">
     <div class="report-preview">
 
+        <!-- SECTION 0: VOLUME DETAILS -->
+        <div id="volDetailsWrapper"></div>
+
         <!-- SECTION 1: STRAPPING -->
         <div class="report-meta">
             <span id="rptCompany1"></span>
@@ -154,8 +157,8 @@
                     <th>Course No</th>
                     <th>Mean Internal Circumference [m]</th>
                     <th>Course Height [cm]</th>
-                    <th id="cumColDatum" style="display:none">Cumulative Height from Datum [cm]</th>
                     <th>Cumulative Height from Bottom [cm]</th>
+                    <th id="cumColDatum">Cumulative Height from Datum [cm]</th>
                     <th>litre/cm</th>
                     <th>Volume [litre]</th>
                 </tr>
@@ -163,7 +166,7 @@
             <tbody id="openCapBody"></tbody>
         </table>
 
-        <!-- SECTION 4: NET CAPACITY -->
+        <!-- SECTION 5: NET CAPACITY -->
         <div class="report-meta">
             <span id="rptCompany4"></span>
             <span id="rptTankNo4"></span>
@@ -248,8 +251,9 @@ async function onTankChange() {
 
         const companyName = document.getElementById('companySelect').selectedOptions[0].text;
         const tankLabel   = `Tank No: ${tank.tank_number}`;
+        const normalizedDeadwood = normalizeDeadwood(deadwoodData);
 
-        ['1','2','3','4'].forEach(n => {
+        ['1','2','3','4','5'].forEach(n => {
             const co = document.getElementById(`rptCompany${n}`);
             const tn = document.getElementById(`rptTankNo${n}`);
             if (co) co.textContent = companyName;
@@ -257,9 +261,10 @@ async function onTankChange() {
         });
 
         renderStrapping(strappingRows, tank.course_count);
-        renderDeadwoods(deadwoodData);
+        renderDeadwoods(normalizedDeadwood);
         const openCapRows = renderOpenCapacity(tank, courses, strappingRows);
-        renderNetCapacity(tank, openCapRows, deadwoodData);
+        renderVolumeDetails(tank, openCapRows, normalizedDeadwood, companyName);
+        renderNetCapacity(tank, openCapRows, normalizedDeadwood);
 
         document.getElementById('reportWrapper').classList.add('visible');
         document.getElementById('btnPrint').disabled = false;
@@ -295,6 +300,34 @@ function renderStrapping(rows, courseCount) {
 }
 
 /* ── DEADWOODS ── */
+function normalizeDeadwood(data) {
+    const normalizeHorizontal = (data.horizontal || []).map(r => {
+        const heightStart = parseFloat(r.height_start) || 0;
+        const heightEnd = parseFloat(r.height_end) || 0;
+        const length = parseFloat(r.length) || 0;
+        const dia = heightEnd - heightStart;
+        const volume = dia > 0 && length > 0
+            ? (3.1416 * dia * dia * length) / 4000
+            : parseFloat(r.volume || 0);
+        const litrePerCm = dia !== 0
+            ? volume / dia
+            : parseFloat(r.litre_per_cm || 0);
+        return { ...r, volume, litre_per_cm: litrePerCm };
+    });
+
+    const normalizeVertical = (data.vertical || []).map(r => {
+        const length = parseFloat(r.length) || 0;
+        const area = parseFloat(r.area) || 0;
+        const volume = (r.method === 'automatic' && length > 0)
+            ? (area * length) / 1000
+            : parseFloat(r.volume || 0);
+        const litrePerCm = length !== 0 ? volume / length : parseFloat(r.litre_per_cm || 0);
+        return { ...r, volume, litre_per_cm: litrePerCm };
+    });
+
+    return { horizontal: normalizeHorizontal, vertical: normalizeVertical };
+}
+
 function renderDeadwoods(data) {
     const hasHorizontal = data.horizontal && data.horizontal.length > 0;
     const hasVertical   = data.vertical && data.vertical.length > 0;
@@ -362,8 +395,13 @@ function renderOpenCapacity(tank, courses, strappingRows) {
     const crownV = parseFloat(tank.crown_volume || 0);
 
     const crownGtDatum = crownH > datumH;
-    const subtractH = crownGtDatum ? (crownH - datumH) : datumH;
     const datumGtCrown = !crownGtDatum;
+    // Course Height column (course 1 only): subtract crown height when crown>datum,
+    // otherwise subtract datum height.
+    const courseHeightSubtract = crownGtDatum ? crownH : datumH;
+    // Cumulative Height from Datum column (course 1 only): always measured
+    // relative to the datum height, regardless of which branch we're in.
+    const datumCumSubtract = datumH;
 
     const sorted = [...courses].sort((a, b) => a.course_number - b.course_number);
 
@@ -377,10 +415,14 @@ function renderOpenCapacity(tank, courses, strappingRows) {
         const mic      = computeMIC(strappingRows, courseNo);
 
         let displayH = actualH;
-        if (idx === 0) displayH = actualH - subtractH;
+        let datumStepH = actualH;
+        if (idx === 0) {
+            displayH   = actualH - courseHeightSubtract;
+            datumStepH = actualH - datumCumSubtract;
+        }
 
         cumulativeBottom += actualH;
-        cumulativeDatum  += displayH;
+        cumulativeDatum  += datumStepH;
 
         const cumulBottom = parseFloat(cumulativeBottom.toFixed(4));
         const cumulDatum  = parseFloat(cumulativeDatum.toFixed(4));
@@ -394,7 +436,8 @@ function renderOpenCapacity(tank, courses, strappingRows) {
         rowsData.push({ courseNo, mic, actualH, displayH, cumulBottom, cumulDatum, volume, litreCm });
     });
 
-    document.getElementById('cumColDatum').style.display = datumGtCrown ? '' : 'none';
+    // Cumulative Height from Datum column is now always shown.
+    document.getElementById('cumColDatum').style.display = '';
 
     const tbody = document.getElementById('openCapBody');
     tbody.innerHTML = '';
@@ -404,13 +447,12 @@ function renderOpenCapacity(tank, courses, strappingRows) {
         const heightDisplay = (r.courseNo === rowsData[0].courseNo)
             ? r.displayH.toFixed(1)
             : r.actualH.toFixed(1);
-        const datumCumCell = datumGtCrown ? `<td>${r.cumulDatum}</td>` : '';
         tr.innerHTML = `
             <td>${r.courseNo}</td>
             <td>${r.mic !== null ? r.mic.toFixed(4) : '-'}</td>
             <td>${heightDisplay}</td>
-            ${datumCumCell}
             <td>${r.cumulBottom}</td>
+            <td>${r.cumulDatum}</td>
             <td>${r.litreCm !== null ? r.litreCm.toFixed(2) : '-'}</td>
             <td>${r.volume !== null ? r.volume.toFixed(2) : '-'}</td>
         `;
@@ -423,38 +465,315 @@ function renderOpenCapacity(tank, courses, strappingRows) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Crown from Datum</td>
-            <td>${crownFromDatum.toFixed(2)}</td><td></td><td></td>
+            <td>${crownFromDatum.toFixed(2)}</td>
+            <td>${crownFromDatum.toFixed(2)}</td>
+            <td></td>
+            <td></td>
             <td>${crownVolFromDatum.toFixed(2)}</td>
         `;
         tbody.appendChild(tr);
     }
 
     const dtr = document.createElement('tr');
-    if (datumGtCrown) {
-        dtr.innerHTML = `
-            <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Datum From Bottom</td>
-            <td></td>
-            <td>${datumH}</td>
-            <td>${datumH}</td>
-            <td></td>
-            <td>${datumV.toFixed(2)}</td>
-        `;
-    } else {
-        dtr.innerHTML = `
-            <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Datum From Bottom</td>
-            <td>${datumH}</td>
-            <td>${datumH}</td>
-            <td></td>
-            <td>${datumV.toFixed(2)}</td>
-        `;
-    }
+    dtr.innerHTML = `
+        <td colspan="2" class="label-cell">&nbsp;&nbsp;Height of Datum From Bottom</td>
+        <td>${datumH}</td>
+        <td>${datumH}</td>
+        <td></td>
+        <td></td>
+        <td>${datumV.toFixed(2)}</td>
+    `;
     tbody.appendChild(dtr);
 
     return rowsData;
 }
 
-/* ── NET CAPACITY ── */
-function getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd) {
+/* ── VOLUME DETAILS ── */
+function renderVolumeDetails(tank, openCapRows, deadwoodData, companyName) {
+    const datumH = parseFloat(tank.datum_height || 0);
+    const datumV = parseFloat(tank.datum_volume || 0);
+    const crownH = parseFloat(tank.crown_height || 0);
+    const crownV = parseFloat(tank.crown_volume || 0);
+    const crownGtDatum = crownH > datumH;
+    const crownFromDatum = parseFloat((crownH - datumH).toFixed(4));
+    const tankLabel = `Tank No: ${tank.tank_number}`;
+    const sorted = [...openCapRows].sort((a, b) => a.courseNo - b.courseNo);
+
+    // Build deadwood RANGES (start, end, litreCm) for both horizontal and vertical types
+    const dwRanges = [];
+    (deadwoodData.horizontal || []).forEach(dw => {
+        const hs = parseFloat(dw.height_start||0);
+        const he = parseFloat(dw.height_end||0);
+        const lc = parseFloat(dw.litre_per_cm||0);
+        if (he > hs) dwRanges.push({ start: hs, end: he, litreCm: lc });
+    });
+    (deadwoodData.vertical || []).forEach(dw => {
+        const hs = parseFloat(dw.height_start||0);
+        const len = parseFloat(dw.length||0);
+        const lc = parseFloat(dw.litre_per_cm||0);
+        if (len > 0) dwRanges.push({ start: hs, end: hs+len, litreCm: lc });
+    });
+
+    // Point events (start/end heights) — still needed to know where to break/insert rows
+    const dwEvents = [];
+    dwRanges.forEach(r => {
+        dwEvents.push({ height: r.start, litreCm: r.litreCm });
+        dwEvents.push({ height: r.end,   litreCm: r.litreCm });
+    });
+    function getDwAt(h) { return dwEvents.filter(e => Math.abs(e.height - h) < 0.001); }
+
+    // Sum of litreCm for all deadwoods ACTIVE (overlapping) at a given height.
+    // A deadwood is active across its full [start, end] range — this is ADDED
+    // to the course litreCm for that section (verified against HHA official data).
+    function activeDwLitreCmAt(h) {
+        let total = 0;
+        dwRanges.forEach(r => {
+            if (h >= r.start - 0.0001 && h <= r.end + 0.0001) total += r.litreCm;
+        });
+        return total;
+    }
+
+    // Row types:
+    // 'data', 'phys', 'gap' — rendered rows
+    // 'fracStart' — NOT rendered, signals fraction panel: { litreCm, isCourse }
+    //   isCourse=true  → course panel (shows course litreCm)
+    //   isCourse=false → deadwood panel (shows dw litreCm), AFTER this row a course panel resumes
+    const rows = [];
+    let currentVol = 0, currentDip = 0;
+
+    if (crownGtDatum) {
+        rows.push({ type:'data', courseNo:null, dip:0, volume:datumV });
+        rows.push({ type:'phys' });
+        rows.push({ type:'data', courseNo:null, dip:crownFromDatum, volume:crownV });
+        rows.push({ type:'phys' });
+        currentVol = crownV;
+        currentDip = crownFromDatum;
+    } else {
+        rows.push({ type:'data', courseNo:null, dip:0, volume:datumV });
+        rows.push({ type:'phys' });
+        currentVol = datumV;
+        currentDip = 0;
+    }
+
+    sorted.forEach((course, courseIdx) => {
+        const baseLitreCm = course.litreCm;
+        // When BOTH crown and datum exist, the table's final height is the
+        // cumulative height from BOTTOM (e.g. 702) — courses step using cumulBottom.
+        // When only datum exists (no crown / crown <= datum), the cumulative
+        // height from DATUM is the correct final height — courses step using cumulDatum.
+        const courseEndDip = crownGtDatum
+            ? course.cumulBottom - datumH
+            : ((course.cumulDatum !== undefined && course.cumulDatum !== null)
+                ? course.cumulDatum
+                : course.cumulBottom - datumH);
+        // The course number to label the END boundary row with — this is the NEXT
+        // course's number (since the boundary row visually marks where the next
+        // course begins), or the current course's own number if this is the last course.
+        const nextCourse = sorted[courseIdx + 1];
+        const boundaryCourseNo = nextCourse ? nextCourse.courseNo : course.courseNo;
+
+        // Helper: effective litreCm for the step from `from` to `to` —
+        // course litreCm PLUS any active deadwood litreCm at the step's midpoint.
+        function stepLitreCm(from, to) {
+            const mid = (from + to) / 2;
+            return baseLitreCm + activeDwLitreCmAt(mid);
+        }
+
+        // Collect all deadwood event heights within this course — used to know
+        // where to break rows (so a row exists exactly at each deadwood start/end)
+        const dwHeights = [];
+        dwEvents.forEach(e => {
+            if (e.height > currentDip + 0.001 && e.height <= courseEndDip + 0.001)
+                if (!dwHeights.find(x => Math.abs(x - e.height) < 0.001)) dwHeights.push(e.height);
+        });
+        dwHeights.sort((a, b) => a - b);
+
+        let h = Math.ceil(currentDip + 0.0001);
+
+        while (h <= courseEndDip + 0.001) {
+            // Handle fractional deadwood heights that fall before this whole-number dip
+            const beforeDw = dwHeights.filter(dh => dh < h - 0.001 && dh > currentDip + 0.001);
+            for (const dh of beforeDw) {
+                const vol = currentVol + stepLitreCm(currentDip, dh) * (dh - currentDip);
+                rows.push({ type:'data', courseNo:course.courseNo, dip:dh, volume:vol });
+                rows.push({ type:'gap' });
+                rows.push({ type:'gap' });
+                currentVol = vol; currentDip = dh;
+            }
+            if (h > courseEndDip + 0.001) break;
+
+            const isDwHeight = dwHeights.some(dh => Math.abs(dh - h) < 0.001);
+            const isExactBoundary = Math.abs(h - courseEndDip) < 0.001;
+            const vol = currentVol + stepLitreCm(currentDip, h) * (h - currentDip);
+            rows.push({ type:'data', courseNo: isExactBoundary ? boundaryCourseNo : course.courseNo, dip:h, volume:vol });
+            currentVol = vol; currentDip = h;
+
+            if (isDwHeight) {
+                rows.push({ type:'gap' });
+                rows.push({ type:'gap' });
+            }
+
+            h = parseFloat((h + 1).toFixed(4));
+        }
+
+        if (Math.abs(courseEndDip - currentDip) > 0.001) {
+            const vol = currentVol + stepLitreCm(currentDip, courseEndDip) * (courseEndDip - currentDip);
+            rows.push({ type:'data', courseNo:boundaryCourseNo, dip:courseEndDip, volume:vol });
+            currentVol = vol;
+            currentDip = courseEndDip;
+        }
+    });
+
+    // Split into pages of 30 rendered rows (no fracStart rows exist yet at this point)
+    const ROWS_PER_PAGE = 30;
+    const pages = [];
+    let curRows = [], dataCount = 0;
+
+    function flushPage() {
+        if (curRows.length) pages.push([...curRows]);
+        curRows = []; dataCount = 0;
+    }
+
+    rows.forEach(row => {
+        if (dataCount > 0 && dataCount % ROWS_PER_PAGE === 0) {
+            flushPage();
+        }
+        curRows.push(row);
+        if (row.type !== 'gap') dataCount++;
+    });
+    flushPage();
+
+    // For each page, compute litreCm as the difference between the first two
+    // ACTUAL COURSE data rows on that page (courseNo !== null) — using the
+    // ROUNDED (displayed) volume values, exactly as a person reading the table
+    // would subtract them — then insert ONE fraction panel at the top of the page.
+    pages.forEach(pageRows => {
+        const courseDataRows = pageRows.filter(r => r.type === 'data' && r.courseNo !== null);
+        if (courseDataRows.length >= 2) {
+            const r0 = courseDataRows[0], r1 = courseDataRows[1];
+            const dipDiff = r1.dip - r0.dip;
+            const v0 = Math.round(r0.volume);
+            const v1 = Math.round(r1.volume);
+            const pageLitreCm = dipDiff > 0
+                ? (v1 - v0) / dipDiff
+                : null;
+            if (pageLitreCm && pageLitreCm > 0) {
+                pageRows.unshift({ type:'fracStart', litreCm: pageLitreCm });
+            }
+        }
+    });
+
+    // Render pages
+    const wrapper = document.getElementById('volDetailsWrapper');
+    wrapper.innerHTML = '';
+
+    pages.forEach((pageRows) => {
+        const section = document.createElement('div');
+        section.style.cssText = 'page-break-after: always; margin-bottom: 32px;';
+
+        const meta = document.createElement('div');
+        meta.className = 'report-meta';
+        meta.innerHTML = `<span>${companyName}</span><span>${tankLabel}</span>`;
+        section.appendChild(meta);
+
+        const table = document.createElement('table');
+        table.className = 'report-table';
+        table.style.marginBottom = '0';
+        table.innerHTML = `
+            <thead>
+                <tr><td colspan="6" class="section-title">Volume Details</td></tr>
+                <tr>
+                    <th>Course No.</th>
+                    <th>Dip from Datum<br><small>cm</small></th>
+                    <th>Volume<br><small>litre</small></th>
+                    <th style="border:none;width:20px;background:none;padding:0"></th>
+                    <th>Fraction Dip<br><small>cm</small></th>
+                    <th>Quantity<br><small>litre</small></th>
+                </tr>
+            </thead>
+        `;
+        const tbody = document.createElement('tbody');
+
+        // Build fracMap: renderedIdx -> {frac, qty}
+        // A fracStart row triggers a new 10-row fraction panel starting at the NEXT rendered row.
+        // Each new fracStart resets the panel — so page-start, course-start and every
+        // deadwood event (start/end) all get their own fresh panel.
+        // Gap rows are rendered but do NOT consume a fraction slot.
+
+        // First pass: collect all rendered row types in order (excluding fracStart).
+        const renderedTypes = [];
+        pageRows.forEach(r => { if (r.type !== 'fracStart') renderedTypes.push(r.type); });
+
+        const fracMap = {};
+        let rIdx = 0;
+
+        pageRows.forEach(row => {
+            if (row.type === 'fracStart') {
+                // Skip panels with no valid litreCm (avoids "0.1 | 0" rows)
+                if (!row.litreCm || row.litreCm <= 0) return;
+
+                // Fill exactly 10 non-gap slots starting from current rIdx
+                let filled = 0, scan = rIdx;
+                while (filled < 10 && scan < renderedTypes.length) {
+                    if (renderedTypes[scan] === 'gap') {
+                        // Gap rows get no fraction value — leave blank, don't repeat
+                        scan++;
+                        continue;
+                    }
+                    const fracVal = parseFloat(((filled + 1) * 0.1).toFixed(1));
+                    const qtyVal  = parseFloat((row.litreCm * (filled + 1) * 0.1).toFixed(1));
+                    fracMap[scan] = { frac: fracVal, qty: qtyVal };
+                    filled++;
+                    scan++;
+                }
+            } else {
+                rIdx++;
+            }
+        });
+
+        // Render
+        let renderedIdx = 0, lastCourseNo = null;
+        const sp = 'border:none;padding:0;width:20px';
+        pageRows.forEach(row => {
+            if (row.type === 'fracStart') return;
+            const tr = document.createElement('tr');
+            const fe = fracMap[renderedIdx];
+            const fracCells = fe
+                ? `<td style="${sp}"></td><td style="border:1px solid #333;font-weight:bold">${fe.frac}</td><td style="border:1px solid #333">${fe.qty}</td>`
+                : `<td style="${sp}"></td><td style="border:1px solid #333"></td><td style="border:1px solid #333"></td>`;
+
+            if (row.type === 'data') {
+                const showCN = row.courseNo !== null && row.courseNo !== lastCourseNo;
+                if (row.courseNo !== null) lastCourseNo = row.courseNo;
+                tr.innerHTML = `
+                    <td>${showCN ? row.courseNo : ''}</td>
+                    <td><b>${row.dip}</b></td>
+                    <td>${Math.round(row.volume)}</td>
+                    ${fracCells}
+                `;
+            } else if (row.type === 'phys') {
+                tr.innerHTML = `<td></td><td>Physically</td><td>Calibrated</td>${fracCells}`;
+            } else if (row.type === 'gap') {
+                tr.innerHTML = `
+                    <td style="border:1px solid #333;height:22px"></td>
+                    <td style="border:1px solid #333"></td>
+                    <td style="border:1px solid #333"></td>
+                    ${fracCells}
+                `;
+            }
+            tbody.appendChild(tr);
+            renderedIdx++;
+        });
+
+        table.appendChild(tbody);
+        section.appendChild(table);
+        wrapper.appendChild(section);
+    });
+}
+
+/* ── NET CAPACITY ── *//* ── NET CAPACITY ── *//* ── NET CAPACITY ── *//* ── NET CAPACITY ── *//* ── NET CAPACITY ── *//* ── NET CAPACITY ── */
+function getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd, minHeight = -Infinity) {
+    // minHeight: ignore any deadwood portions below this height
     let hVol = 0, vVol = 0;
 
     (deadwoodData.horizontal || []).forEach(dw => {
@@ -463,7 +782,7 @@ function getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd) {
         const dwVol    = parseFloat(dw.volume || 0);
         const dwHeight = dwEnd - dwStart;
         if (dwHeight <= 0 || dwVol === 0) return;
-        const overlapStart = Math.max(dwStart, courseStart);
+        const overlapStart = Math.max(dwStart, courseStart, minHeight);
         const overlapEnd   = Math.min(dwEnd, courseEnd);
         if (overlapEnd > overlapStart) {
             hVol += dwVol * (overlapEnd - overlapStart) / dwHeight;
@@ -476,10 +795,13 @@ function getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd) {
         const dwEnd   = dwStart + dwLen;
         const dwVol   = parseFloat(dw.volume || 0);
         if (dwLen <= 0 || dwVol === 0) return;
-        const overlapStart = Math.max(dwStart, courseStart);
+        const overlapStart = Math.max(dwStart, courseStart, minHeight);
         const overlapEnd   = Math.min(dwEnd, courseEnd);
         if (overlapEnd > overlapStart) {
-            vVol += dwVol * (overlapEnd - overlapStart) / dwLen;
+            // Vertical deadwood ALWAYS subtracts from capacity.
+            // Treat negative volumes as subtractive as well by using abs().
+            const contributingVol = Math.abs(dwVol);
+            vVol += contributingVol * (overlapEnd - overlapStart) / dwLen;
         }
     });
 
@@ -498,13 +820,25 @@ function renderNetCapacity(tank, openCapRows, deadwoodData) {
     const baseVolume   = crownGtDatum ? crownV : datumV;
 
     const netRows = [];
+    const threshold = crownGtDatum ? crownH : datumH;
 
     openCapRows.forEach((r, idx) => {
         const courseStart = idx === 0 ? 0 : openCapRows[idx - 1].cumulBottom;
         const courseEnd   = r.cumulBottom;
         const openVol     = r.volume !== null ? r.volume : 0;
-        const dw          = getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd);
-        const deadwoodNet = dw.horizontal - dw.vertical;
+        const dw          = getDeadwoodVolumeForCourse(deadwoodData, courseStart, courseEnd, threshold);
+        // Ensure negative deadwood volumes always subtract from final net capacity.
+        // dw.horizontal and dw.vertical may be signed (negative indicates a
+        // subtractive deadwood). The intended behaviour:
+        //  - Positive horizontal: added to deadwood total
+        //  - Negative horizontal: subtract its absolute value
+        //  - Positive vertical: subtracted from deadwood total
+        //  - Negative vertical: also subtracted (i.e. subtract absolute value)
+        const hRaw = parseFloat(dw.horizontal || 0);
+        const vRaw = parseFloat(dw.vertical || 0);
+        const hEffective = hRaw >= 0 ? hRaw : -Math.abs(hRaw);
+        const vEffective = vRaw >= 0 ? vRaw : Math.abs(vRaw);
+        const deadwoodNet = hEffective - vEffective;
         const netVol      = openVol + deadwoodNet;
         netRows.push({ courseNo: r.courseNo, openVol, deadwoodNet, netVol });
     });
@@ -544,6 +878,8 @@ function renderNetCapacity(tank, openCapRows, deadwoodData) {
 function hideReport() {
     document.getElementById('reportWrapper').classList.remove('visible');
     document.getElementById('btnPrint').disabled = true;
+    const volWrapper = document.getElementById('volDetailsWrapper');
+    if (volWrapper) volWrapper.innerHTML = '';
     ['strappingBody','deadwoodHBody','deadwoodVBody','openCapBody','netCapBody'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
