@@ -483,49 +483,67 @@ function renderStrappingTable(courseCount, readingsPerCourse, containerId, exist
     updateGeneratedValues(containerId);
 }
 
+function focusInput(input) {
+    if (!input) return;
+    input.focus();
+    if (typeof input.select === 'function') input.select();
+}
+
+function moveGridFocus(allRowsInputs, rowIndex, colIndex, key) {
+    const rowInputs = allRowsInputs[rowIndex];
+    if (!rowInputs) return null;
+
+    if (key === 'Enter' || key === 'ArrowDown') {
+        const nextRow = allRowsInputs[rowIndex + 1];
+        if (nextRow && nextRow[colIndex]) return nextRow[colIndex];
+        if (key === 'Enter' && nextRow) return nextRow[0];
+        return null;
+    }
+
+    if (key === 'ArrowUp') {
+        const prevRow = allRowsInputs[rowIndex - 1];
+        if (prevRow && prevRow[colIndex]) return prevRow[colIndex];
+        if (prevRow) return prevRow[prevRow.length - 1];
+        return null;
+    }
+
+    if (key === 'ArrowRight') {
+        if (colIndex < rowInputs.length - 1) return rowInputs[colIndex + 1];
+        const nextRow = allRowsInputs[rowIndex + 1];
+        if (nextRow) return nextRow[0];
+        return null;
+    }
+
+    if (key === 'ArrowLeft') {
+        if (colIndex > 0) return rowInputs[colIndex - 1];
+        const prevRow = allRowsInputs[rowIndex - 1];
+        if (prevRow) return prevRow[prevRow.length - 1];
+        return null;
+    }
+
+    return null;
+}
 
 function attachStrappingListeners(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     const editableClasses = ['external-circumference', 'stepover', 'plate-thickness'];
-
     const allRows = Array.from(container.querySelectorAll('.strapping-row'));
+    const allRowsInputs = allRows.map(row =>
+        editableClasses
+            .map(cls => row.querySelector(`input.${cls}`))
+            .filter(Boolean)
+    );
 
     allRows.forEach((row, rowIndex) => {
-        const editableInputs = editableClasses
-            .map(cls => row.querySelector(`input.${cls}`))
-            .filter(Boolean);
-
+        const editableInputs = allRowsInputs[rowIndex];
         editableInputs.forEach((input, colIndex) => {
             input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const isLastCol = colIndex === editableInputs.length - 1;
-                    if (isLastCol) {
-                        // Move to first editable input of next row
-                        const nextRow = allRows[rowIndex + 1];
-                        if (nextRow) {
-                            const nextFirst = nextRow.querySelector(`input.${editableClasses[0]}`);
-                            if (nextFirst) { nextFirst.focus(); nextFirst.select(); }
-                        }
-                    } else {
-                        editableInputs[colIndex + 1].focus();
-                        editableInputs[colIndex + 1].select();
-                    }
-                } else if (e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    if (colIndex < editableInputs.length - 1) {
-                        editableInputs[colIndex + 1].focus();
-                        editableInputs[colIndex + 1].select();
-                    }
-                } else if (e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    if (colIndex > 0) {
-                        editableInputs[colIndex - 1].focus();
-                        editableInputs[colIndex - 1].select();
-                    }
-                }
+                if (!['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+                e.preventDefault();
+                const target = moveGridFocus(allRowsInputs, rowIndex, colIndex, e.key);
+                if (target) focusInput(target);
             });
 
             input.addEventListener('input', () => updateGeneratedValues(containerId));
@@ -723,28 +741,14 @@ function attachHorizontalRowListeners(tr) {
         input.addEventListener('keydown', (e) => {
             const editableInputs = getEditableInputs();
             const colIndex = editableInputs.indexOf(input);
-            if (colIndex === -1) return;
-
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                if (colIndex === editableInputs.length - 1) {
-                    const rows = getAllRows();
-                    const nextRow = rows[rows.indexOf(tr) + 1];
-                    if (nextRow) {
-                        const nextFirst = nextRow.querySelector(`input${editableCols[0]}`);
-                        if (nextFirst) { nextFirst.focus(); nextFirst.select(); }
-                    }
-                } else {
-                    editableInputs[colIndex + 1].focus();
-                    editableInputs[colIndex + 1].select();
-                }
-            } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                if (colIndex < editableInputs.length - 1) { editableInputs[colIndex + 1].focus(); editableInputs[colIndex + 1].select(); }
-            } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                if (colIndex > 0) { editableInputs[colIndex - 1].focus(); editableInputs[colIndex - 1].select(); }
-            }
+            if (colIndex === -1 || !['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+            e.preventDefault();
+            const rows = getAllRows();
+            const rowIndex = rows.indexOf(tr);
+            const target = moveGridFocus(rows.map(r => editableCols
+                .map(cls => r.querySelector(`input${cls}`))
+                .filter(Boolean)), rowIndex, colIndex, e.key);
+            if (target) focusInput(target);
         });
 
         if (input.classList.contains('hw-height-start') ||
@@ -808,35 +812,20 @@ function attachVerticalRowListeners(tr) {
         input.addEventListener('keydown', (e) => {
             const editableInputs = getEditableInputs();
             const colIndex = editableInputs.indexOf(input);
-            if (colIndex === -1) return;
-
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const isLastCol = colIndex === editableInputs.length - 1;
-                if (isLastCol) {
-                    const rows = getAllRows();
-                    const rowIndex = rows.indexOf(tr);
-                    const nextRow = rows[rowIndex + 1];
-                    if (nextRow) {
-                        const firstCls = getEditableCols()[0];
-                        const nextFirst = nextRow.querySelector(`input${firstCls}`);
-                        if (nextFirst) { nextFirst.focus(); nextFirst.select(); }
-                    }
-                } else {
-                    editableInputs[colIndex + 1].focus();
-                    editableInputs[colIndex + 1].select();
-                }
-            } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                const editableInputs2 = getEditableInputs();
-                const idx = editableInputs2.indexOf(input);
-                if (idx < editableInputs2.length - 1) { editableInputs2[idx + 1].focus(); editableInputs2[idx + 1].select(); }
-            } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                const editableInputs2 = getEditableInputs();
-                const idx = editableInputs2.indexOf(input);
-                if (idx > 0) { editableInputs2[idx - 1].focus(); editableInputs2[idx - 1].select(); }
-            }
+            if (colIndex === -1 || !['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+            e.preventDefault();
+            const rows = getAllRows();
+            const rowIndex = rows.indexOf(tr);
+            const target = moveGridFocus(rows.map(r => {
+                const method = r.querySelector('.vw-method');
+                const rowEditableCols = method && method.value === 'manual'
+                    ? ['.vw-height-start', '.vw-length', '.vw-name', '.vw-volume']
+                    : ['.vw-area', '.vw-height-start', '.vw-length', '.vw-name'];
+                return rowEditableCols
+                    .map(cls => r.querySelector(`input${cls}`))
+                    .filter(Boolean);
+            }), rowIndex, colIndex, e.key);
+            if (target) focusInput(target);
         });
 
         if (input.classList.contains('vw-area') ||

@@ -67,8 +67,56 @@ async function onTankChange() {
         `;
     }
 
+    attachDatumCrownNavigation();
+    attachCourseTableNavigation();
     document.getElementById('step3').style.display = 'block';
 }
+
+function attachDatumCrownNavigation() {
+    const ids = ['datumHeight', 'datumVolume', 'crownHeight', 'crownVolume'];
+    const inputs = ids
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+    inputs.forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+            if (!['Enter', 'ArrowRight', 'ArrowLeft'].includes(e.key)) return;
+            e.preventDefault();
+            let targetIndex = index;
+            if (e.key === 'Enter' || e.key === 'ArrowRight') {
+                targetIndex = Math.min(inputs.length - 1, index + 1);
+            } else if (e.key === 'ArrowLeft') {
+                targetIndex = Math.max(0, index - 1);
+            }
+            const target = inputs[targetIndex];
+            if (target) {
+                target.focus();
+                target.select();
+            }
+        });
+    });
+}
+
+function attachCourseTableNavigation() {
+    const inputs = Array.from(document.querySelectorAll('#courseTable input'));
+    inputs.forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+            if (!['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+            e.preventDefault();
+            let targetIndex = index;
+            if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                targetIndex = Math.min(inputs.length - 1, index + 1);
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                targetIndex = Math.max(0, index - 1);
+            }
+            const target = inputs[targetIndex];
+            if (target) {
+                target.focus();
+                target.select();
+            }
+        });
+    });
+}
+
 async function saveDetails() {
     if (!selectedTankId) return;
 
