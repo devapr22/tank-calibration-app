@@ -6,7 +6,7 @@ async function loadCompanies() {
     try {
 
         const response =
-            await fetch("http://localhost:3000/companies");
+            await fetch("https://tank-calibration-app.onrender.com/companies");
 
         companies = await response.json();
 
@@ -46,7 +46,7 @@ async function addCompany() {
         if (editingCompanyId) {
 
             await fetch(
-                `http://localhost:3000/companies/${editingCompanyId}`,
+                `https://tank-calibration-app.onrender.com/companies/${editingCompanyId}`,
                 {
                     method: "PUT",
 
@@ -74,7 +74,7 @@ async function addCompany() {
         } else {
 
             await fetch(
-                "http://localhost:3000/companies",
+                "https://tank-calibration-app.onrender.com/companies",
                 {
                     method: "POST",
 
@@ -144,7 +144,7 @@ async function deleteCompany(companyId) {
     try {
 
         await fetch(
-            `http://localhost:3000/companies/${companyId}`,
+            `https://tank-calibration-app.onrender.com/companies/${companyId}`,
             {
                 method: "DELETE"
             }

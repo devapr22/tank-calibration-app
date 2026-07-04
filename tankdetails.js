@@ -1,4 +1,4 @@
-const API = "http://localhost:3000";
+const API = "https://tank-calibration-app.onrender.com";
 let selectedTankId = null;
 let courseCount = 0;
 

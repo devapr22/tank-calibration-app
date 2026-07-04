@@ -7,14 +7,14 @@ let editingTankId = null;
 let strappingAction = 'add';
 
 async function loadCompanies() {
-    const response = await fetch("http://localhost:3000/companies");
+    const response = await fetch("https://tank-calibration-app.onrender.com/companies");
     companies = await response.json();
     // DB uses 'name' but tank.js uses 'companyName' — map it
     companies = companies.map(c => ({ ...c, companyName: c.name, tanks: [] }));
     company = companies.find(c => String(c.id) === String(selectedCompanyId)) || null;
     // Load tanks for the selected company if there is one
     if (company) {
-        const tanksRes = await fetch(`http://localhost:3000/tanks/${company.id}`);
+        const tanksRes = await fetch(`https://tank-calibration-app.onrender.com/tanks/${company.id}`);
         company.tanks = await tanksRes.json();
     }
     initMode();
@@ -196,7 +196,7 @@ async function populateStrappingTankSelect(companyId) {
     const tankSelect = document.getElementById('strappingTankSelect');
     if (!tankSelect) return;
     tankSelect.innerHTML = '';
-    const res = await fetch(`http://localhost:3000/tanks/${companyId}`);
+    const res = await fetch(`https://tank-calibration-app.onrender.com/tanks/${companyId}`);
     const tanks = await res.json();
     // also update this company's tanks in memory
     const comp = companies.find(c => String(c.id) === String(companyId));
@@ -217,8 +217,8 @@ async function populateStrappingTankSelect(companyId) {
         const tankId = tankSelect.value;
         // Fetch strapping and deadwood from DB
         const [strappingRes, deadwoodRes] = await Promise.all([
-            fetch(`http://localhost:3000/strapping/${tankId}`),
-            fetch(`http://localhost:3000/deadwood/${tankId}`)
+            fetch(`https://tank-calibration-app.onrender.com/strapping/${tankId}`),
+            fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`)
         ]);
         const strappingRows = await strappingRes.json();
         const deadwood = await deadwoodRes.json();
@@ -339,7 +339,7 @@ async function populateTankSelectForDeadwood(companyId) {
     if (!tankSel) return;
     tankSel.innerHTML = '';
 
-    const res = await fetch(`http://localhost:3000/tanks/${companyId}`);
+    const res = await fetch(`https://tank-calibration-app.onrender.com/tanks/${companyId}`);
     const tanks = await res.json();
 
     if (!tanks.length) {
@@ -356,7 +356,7 @@ async function populateTankSelectForDeadwood(companyId) {
 
     tankSel.onchange = async () => {
         const tankId = tankSel.value;
-        const deadwoodRes = await fetch(`http://localhost:3000/deadwood/${tankId}`);
+        const deadwoodRes = await fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`);
         const deadwood = await deadwoodRes.json();
 
         const deadwoodFormatted = {
@@ -946,14 +946,14 @@ async function saveTank() {
             if (!selectedTankId) { showMessage('Select a tank to edit.', true); return; }
 
             // 1. Update tank header
-            await fetch(`http://localhost:3000/tanks/${selectedTankId}`, {
+            await fetch(`https://tank-calibration-app.onrender.com/tanks/${selectedTankId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tank_number: tankNumber || undefined, course_count: courseCount, readings_per_course: readingsPerCourse })
             });
 
             // 2. Save strapping
-            await fetch(`http://localhost:3000/strapping/${selectedTankId}`, {
+            await fetch(`https://tank-calibration-app.onrender.com/strapping/${selectedTankId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ courses })
@@ -961,7 +961,7 @@ async function saveTank() {
 
             // 3. Save deadwood
             const deadwood = getDeadwoodData('deadwoodSection');
-            await fetch(`http://localhost:3000/deadwood/${selectedTankId}`, {
+            await fetch(`https://tank-calibration-app.onrender.com/deadwood/${selectedTankId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(deadwood)
@@ -977,7 +977,7 @@ async function saveTank() {
         if (!tankNumber) { showMessage('Tank number is required.', true); return; }
 
         // 1. Create tank
-        const tankRes = await fetch('http://localhost:3000/tanks', {
+        const tankRes = await fetch('https://tank-calibration-app.onrender.com/tanks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ company_id: targetCompany.id, tank_number: tankNumber, course_count: courseCount, readings_per_course: readingsPerCourse })
@@ -985,7 +985,7 @@ async function saveTank() {
         const newTank = await tankRes.json();
 
         // 2. Save strapping
-        await fetch(`http://localhost:3000/strapping/${newTank.id}`, {
+        await fetch(`https://tank-calibration-app.onrender.com/strapping/${newTank.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ courses })
@@ -994,7 +994,7 @@ async function saveTank() {
         // 3. Save deadwood
         let deadwoodData = { horizontal: [], vertical: [] };
         try { deadwoodData = getDeadwoodData('deadwoodSection'); } catch (e) {}
-        await fetch(`http://localhost:3000/deadwood/${newTank.id}`, {
+        await fetch(`https://tank-calibration-app.onrender.com/deadwood/${newTank.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(deadwoodData)
@@ -1021,7 +1021,7 @@ async function renderExistingTankList() {
     container.innerHTML = "";
 
     // Fetch tanks from DB
-    const res = await fetch(`http://localhost:3000/tanks/${company.id}`);
+    const res = await fetch(`https://tank-calibration-app.onrender.com/tanks/${company.id}`);
     company.tanks = await res.json();
 
     if (!company.tanks.length) {
@@ -1084,8 +1084,8 @@ function filterTankList() {
 async function editTank(tankId) {
     // Fetch strapping and deadwood from DB
     const [strappingRes, deadwoodRes] = await Promise.all([
-        fetch(`http://localhost:3000/strapping/${tankId}`),
-        fetch(`http://localhost:3000/deadwood/${tankId}`)
+        fetch(`https://tank-calibration-app.onrender.com/strapping/${tankId}`),
+        fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`)
     ]);
     const strappingRows = await strappingRes.json();
     const deadwood = await deadwoodRes.json();
@@ -1142,14 +1142,14 @@ async function updateTank() {
         const courses = getStrappingData("editCourseInputs");
 
         // 1. Update tank header
-        await fetch(`http://localhost:3000/tanks/${editingTankId}`, {
+        await fetch(`https://tank-calibration-app.onrender.com/tanks/${editingTankId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tank_number: tankNumber, course_count: courses.length, readings_per_course: company.tanks.find(t => t.id === editingTankId)?.readings_per_course || 3 })
         });
 
         // 2. Save strapping
-        await fetch(`http://localhost:3000/strapping/${editingTankId}`, {
+        await fetch(`https://tank-calibration-app.onrender.com/strapping/${editingTankId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ courses })
@@ -1158,14 +1158,14 @@ async function updateTank() {
         // 3. Save deadwood
         let deadwood = { horizontal: [], vertical: [] };
         try { deadwood = getDeadwoodData('editDeadwoodSection'); } catch (e) {}
-        await fetch(`http://localhost:3000/deadwood/${editingTankId}`, {
+        await fetch(`https://tank-calibration-app.onrender.com/deadwood/${editingTankId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(deadwood)
         });
 
         // Reload tanks for this company and re-render
-        const tanksRes = await fetch(`http://localhost:3000/tanks/${company.id}`);
+        const tanksRes = await fetch(`https://tank-calibration-app.onrender.com/tanks/${company.id}`);
         company.tanks = await tanksRes.json();
         renderExistingTankList();
         showMessage("Tank updated successfully.");
@@ -1193,8 +1193,8 @@ async function deleteTank(tankId) {
     const confirmed = confirm("Delete this tank?");
     if (!confirmed) return;
     try {
-        await fetch(`http://localhost:3000/tanks/${tankId}`, { method: 'DELETE' });
-        const tanksRes = await fetch(`http://localhost:3000/tanks/${company.id}`);
+        await fetch(`https://tank-calibration-app.onrender.com/tanks/${tankId}`, { method: 'DELETE' });
+        const tanksRes = await fetch(`https://tank-calibration-app.onrender.com/tanks/${company.id}`);
         company.tanks = await tanksRes.json();
         renderExistingTankList();
         if (editingTankId === tankId) cancelTankEdit();
@@ -1222,7 +1222,7 @@ async function saveDeadwoodForSelectedTank() {
 
     try {
         const data = getDeadwoodData('deadwoodModeSection');
-        await fetch(`http://localhost:3000/deadwood/${tankId}`, {
+        await fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
