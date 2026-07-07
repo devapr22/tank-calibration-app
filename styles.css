@@ -231,6 +231,16 @@ table tbody tr:hover {
     background-color: #fffacd;
 }
 
+.deadwood-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-start;
+}
+
+.tank-detail-fields input {
+    width: 220px;
+    margin: 0;
+}
 
 .button-container {
     display:flex;

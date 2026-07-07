@@ -216,12 +216,14 @@ async function populateStrappingTankSelect(companyId) {
     tankSelect.onchange = async () => {
         const tankId = tankSelect.value;
         // Fetch strapping and deadwood from DB
-        const [strappingRes, deadwoodRes] = await Promise.all([
+        const [strappingRes, deadwoodRes, detailsRes] = await Promise.all([
             fetch(`https://tank-calibration-app.onrender.com/strapping/${tankId}`),
-            fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`)
+            fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`),
+            fetch(`https://tank-calibration-app.onrender.com/tanks/${tankId}/details`)
         ]);
         const strappingRows = await strappingRes.json();
         const deadwood = await deadwoodRes.json();
+        const detailsData = await detailsRes.json();
         const tank = tanks.find(t => String(t.id) === String(tankId));
         // Convert DB rows back to the format renderStrappingTable expects
         const courses = [];
@@ -243,7 +245,7 @@ async function populateStrappingTankSelect(companyId) {
             horizontal: deadwood.horizontal.map(r => ({ heightStart: r.height_start, heightEnd: r.height_end, length: r.length, name: r.name, volume: r.volume, litrePerCm: r.litre_per_cm })),
             vertical: deadwood.vertical.map(r => ({ method: r.method, area: r.area, heightStart: r.height_start, length: r.length, name: r.name, volume: r.volume, litrePerCm: r.litre_per_cm }))
         };
-        loadTankIntoStrappingForm({ ...tank, tankNumber: tank.tank_number, courseCount: tank.course_count, readingsPerCourse: tank.readings_per_course, courses, deadwood: deadwoodFormatted });
+        loadTankIntoStrappingForm({ ...tank, tankNumber: tank.tank_number, courseCount: tank.course_count, readingsPerCourse: tank.readings_per_course, courses, deadwood: deadwoodFormatted, details: detailsData?.tank || {}, courseHeights: detailsData?.courses || [] });
         updateStrappingInfo();
     };
     if (strappingAction === 'edit') {
@@ -266,6 +268,102 @@ function updateStrappingInfo() {
     info.innerHTML = `Tank Number: <strong>${selectedTankText || 'None'}</strong> &nbsp;|&nbsp; Courses: ${courseCount} &nbsp;|&nbsp; Readings per course: ${readingsPerCourse}`;
 }
 
+function getTankDetailValues(prefix = "") {
+    const fieldId = (name) => prefix ? `${prefix}${name.charAt(0).toUpperCase()}${name.slice(1)}` : name;
+    const readNumberValue = (name) => {
+        const input = document.getElementById(fieldId(name));
+        if (!input) return null;
+        const raw = input.value.trim();
+        if (!raw) return null;
+        const parsed = parseFloat(raw);
+        return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    return {
+        datum_height: readNumberValue('datumHeight'),
+        datum_volume: readNumberValue('datumVolume'),
+        crown_height: readNumberValue('crownHeight'),
+        crown_volume: readNumberValue('crownVolume')
+    };
+}
+
+function setTankDetailValues(details = {}, prefix = "") {
+    const fieldId = (name) => prefix ? `${prefix}${name.charAt(0).toUpperCase()}${name.slice(1)}` : name;
+    const setValue = (name, value) => {
+        const input = document.getElementById(fieldId(name));
+        if (input) input.value = value ?? '';
+    };
+
+    setValue('datumHeight', details.datum_height ?? '');
+    setValue('datumVolume', details.datum_volume ?? '');
+    setValue('crownHeight', details.crown_height ?? '');
+    setValue('crownVolume', details.crown_volume ?? '');
+}
+
+function clearTankDetailValues(prefix = "") {
+    const fieldId = (name) => prefix ? `${prefix}${name.charAt(0).toUpperCase()}${name.slice(1)}` : name;
+    ['datumHeight', 'datumVolume', 'crownHeight', 'crownVolume'].forEach(name => {
+        const input = document.getElementById(fieldId(name));
+        if (input) input.value = '';
+    });
+}
+
+function attachTankDetailNavigation(container) {
+    const inputs = Array.from(container.querySelectorAll('input.tank-detail-input, input.course-height-input'));
+    inputs.forEach((input, index) => {
+        input.addEventListener('keydown', (e) => {
+            if (!['Enter', 'ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+            e.preventDefault();
+            let targetIndex = index;
+            if (e.key === 'Enter' || e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                targetIndex = Math.min(inputs.length - 1, index + 1);
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                targetIndex = Math.max(0, index - 1);
+            }
+            const target = inputs[targetIndex];
+            if (target) {
+                target.focus();
+                target.select();
+            }
+        });
+    });
+}
+
+function renderTankDetailSection(courseCount, existingCourses = [], prefix = '') {
+    const isEdit = Boolean(prefix);
+    const section = document.getElementById(isEdit ? 'editTankDetailsSection' : 'tankDetailsSection');
+    if (!section) return;
+    const tableBody = document.getElementById(isEdit ? 'editCourseHeightTableBody' : 'courseHeightTableBody');
+    if (!tableBody) return;
+
+    section.style.display = 'block';
+    tableBody.innerHTML = '';
+
+    for (let i = 1; i <= courseCount; i++) {
+        const existing = existingCourses.find(c => Number(c.course_number) === i);
+        tableBody.innerHTML += `
+            <tr>
+                <td>Course ${i}</td>
+                <td><input type="number" step="any" class="course-height-input" value="${existing ? existing.course_height || '' : ''}" placeholder="Enter height"></td>
+            </tr>
+        `;
+    }
+
+    attachTankDetailNavigation(section);
+}
+
+function getCourseHeightData(prefix = '') {
+    const isEdit = Boolean(prefix);
+    const section = document.getElementById(isEdit ? 'editTankDetailsSection' : 'tankDetailsSection');
+    if (!section) return [];
+    return Array.from(section.querySelectorAll('input.course-height-input'))
+        .map((input) => ({
+            course_number: Number(input.closest('tr').firstElementChild?.textContent?.replace(/[^0-9]/g, '') || 0),
+            course_height: input.value === '' ? null : parseFloat(input.value)
+        }))
+        .filter(item => item.course_number > 0);
+}
+
 function clearStrappingForm() {
     const numberInput = document.getElementById('tankNumber');
     const courseSelect = document.getElementById('courseCount');
@@ -275,6 +373,11 @@ function clearStrappingForm() {
     if (courseSelect) courseSelect.value = '1';
     if (readingsSelect) readingsSelect.value = '3';
     if (courseInputs) courseInputs.innerHTML = '';
+    clearTankDetailValues();
+    const tankDetailsSection = document.getElementById('tankDetailsSection');
+    if (tankDetailsSection) tankDetailsSection.style.display = 'none';
+    const editTankDetailsSection = document.getElementById('editTankDetailsSection');
+    if (editTankDetailsSection) editTankDetailsSection.style.display = 'none';
     const dead = document.getElementById('deadwoodSection');
     if (dead) {
         dead.innerHTML = '';
@@ -302,7 +405,9 @@ function loadTankIntoStrappingForm(tank) {
     if (tankNumberLabel) tankNumberLabel.style.display = 'none';
     if (courseSelect) courseSelect.value = String(tank.courseCount || '1');
     if (readingsSelect) readingsSelect.value = String(tank.readingsPerCourse || '3');
+    setTankDetailValues(tank.details || {});
     renderStrappingTable(tank.courseCount, tank.readingsPerCourse, 'courseInputs', tank.courses);
+    renderTankDetailSection(tank.courseCount || 1, tank.courseHeights || [], '');
     // Always render deadwood so edits are preserved on save
     const dead = document.getElementById('deadwoodSection');
     const deadBtn = document.getElementById('toggleDeadwoodBtn');
@@ -413,6 +518,7 @@ function prepareStrapping() {
 
     showMessage("");
     renderStrappingTable(courseCount, readingsPerCourse, "courseInputs");
+    renderTankDetailSection(courseCount, [], '');
     document.getElementById("saveTankButton").style.display = "inline-block";
 }
 
@@ -613,7 +719,6 @@ function renderDeadwoodSection(containerId, existing = null) {
 
     container.innerHTML = `
         <h3>Deadwood - Horizontal</h3>
-        <button onclick="addHorizontalRow('${containerId}')">Add Horizontal Row</button>
         <table class="deadwood-table" id="${containerId}-horizontal">
             <thead>
                 <tr>
@@ -630,9 +735,11 @@ function renderDeadwoodSection(containerId, existing = null) {
                 ${horizontalRows.map(row => horizontalRowHtml(containerId, row)).join('')}
             </tbody>
         </table>
+        <div class="deadwood-actions">
+            <button type="button" onclick="addHorizontalRow('${containerId}')">Add Horizontal Row</button>
+        </div>
 
         <h3 style="margin-top:16px;">Deadwood - Vertical</h3>
-        <button onclick="addVerticalRow('${containerId}')">Add Vertical Row</button>
         <table class="deadwood-table" id="${containerId}-vertical">
             <thead>
                 <tr>
@@ -650,6 +757,9 @@ function renderDeadwoodSection(containerId, existing = null) {
                 ${verticalRows.map(row => verticalRowHtml(containerId, row)).join('')}
             </tbody>
         </table>
+        <div class="deadwood-actions">
+            <button type="button" onclick="addVerticalRow('${containerId}')">Add Vertical Row</button>
+        </div>
     `;
 
     // Attach calculation listeners for horizontal deadwood
@@ -929,6 +1039,7 @@ async function saveTank() {
         const courseCount = parseInt(document.getElementById("courseCount").value, 10);
         const readingsPerCourse = parseInt(document.getElementById("readingsPerCourse").value, 10);
         const courses = getStrappingData("courseInputs");
+        const courseHeights = getCourseHeightData();
 
         let targetCompany = company;
         const compSelect = document.getElementById('companySelectForStrapping');
@@ -941,7 +1052,7 @@ async function saveTank() {
         const action = tankMode === 'strapping' ? strappingAction : 'add';
 
         // ── EDIT / UPDATE ──
-        if (tankMode === 'strapping' && action === 'edit') {
+            if (tankMode === 'strapping' && action === 'edit') {
             const selectedTankId = strappingTankSelect ? strappingTankSelect.value : null;
             if (!selectedTankId) { showMessage('Select a tank to edit.', true); return; }
 
@@ -952,14 +1063,28 @@ async function saveTank() {
                 body: JSON.stringify({ tank_number: tankNumber || undefined, course_count: courseCount, readings_per_course: readingsPerCourse })
             });
 
-            // 2. Save strapping
+            // 2. Save tank details
+            await fetch(`https://tank-calibration-app.onrender.com/tanks/${selectedTankId}/details`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(getTankDetailValues())
+            });
+
+            // 3. Save strapping
             await fetch(`https://tank-calibration-app.onrender.com/strapping/${selectedTankId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ courses })
             });
 
-            // 3. Save deadwood
+            // 4. Save course heights
+            await fetch(`https://tank-calibration-app.onrender.com/tanks/${selectedTankId}/courses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ courses: courseHeights })
+            });
+
+            // 5. Save deadwood
             const deadwood = getDeadwoodData('deadwoodSection');
             await fetch(`https://tank-calibration-app.onrender.com/deadwood/${selectedTankId}`, {
                 method: 'POST',
@@ -984,14 +1109,28 @@ async function saveTank() {
         });
         const newTank = await tankRes.json();
 
-        // 2. Save strapping
+        // 2. Save datum/crown details
+        await fetch(`https://tank-calibration-app.onrender.com/tanks/${newTank.id}/details`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(getTankDetailValues())
+        });
+
+        // 3. Save strapping
         await fetch(`https://tank-calibration-app.onrender.com/strapping/${newTank.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ courses })
         });
 
-        // 3. Save deadwood
+        // 4. Save course heights
+        await fetch(`https://tank-calibration-app.onrender.com/tanks/${newTank.id}/courses`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courses: courseHeights })
+        });
+
+        // 5. Save deadwood
         let deadwoodData = { horizontal: [], vertical: [] };
         try { deadwoodData = getDeadwoodData('deadwoodSection'); } catch (e) {}
         await fetch(`https://tank-calibration-app.onrender.com/deadwood/${newTank.id}`, {
@@ -1082,13 +1221,15 @@ function filterTankList() {
     renderTankRows(filtered);
 }
 async function editTank(tankId) {
-    // Fetch strapping and deadwood from DB
-    const [strappingRes, deadwoodRes] = await Promise.all([
+    // Fetch strapping, deadwood and tank details from DB
+    const [strappingRes, deadwoodRes, detailsRes] = await Promise.all([
         fetch(`https://tank-calibration-app.onrender.com/strapping/${tankId}`),
-        fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`)
+        fetch(`https://tank-calibration-app.onrender.com/deadwood/${tankId}`),
+        fetch(`https://tank-calibration-app.onrender.com/tanks/${tankId}/details`)
     ]);
     const strappingRows = await strappingRes.json();
     const deadwood = await deadwoodRes.json();
+    const detailsData = await detailsRes.json();
 
     // Convert strapping rows to format renderStrappingTable expects
     const courses = [];
@@ -1123,6 +1264,7 @@ async function editTank(tankId) {
     document.getElementById("editTankNumber").value = tank.tank_number;
 
     renderStrappingTable(tank.course_count, tank.readings_per_course, "editCourseInputs", courses);
+    renderTankDetailSection(tank.course_count, detailsData?.courses || [], 'edit');
 
     renderDeadwoodSection("editDeadwoodSection", deadwoodFormatted);
     const editSection = document.getElementById('editDeadwoodSection');
@@ -1140,6 +1282,7 @@ async function updateTank() {
         if (!tankNumber) { showMessage("Tank number is required.", true); return; }
 
         const courses = getStrappingData("editCourseInputs");
+        const courseHeights = getCourseHeightData('edit');
 
         // 1. Update tank header
         await fetch(`https://tank-calibration-app.onrender.com/tanks/${editingTankId}`, {
@@ -1148,14 +1291,28 @@ async function updateTank() {
             body: JSON.stringify({ tank_number: tankNumber, course_count: courses.length, readings_per_course: company.tanks.find(t => t.id === editingTankId)?.readings_per_course || 3 })
         });
 
-        // 2. Save strapping
+        // 2. Save tank details
+        await fetch(`https://tank-calibration-app.onrender.com/tanks/${editingTankId}/details`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(getTankDetailValues('edit'))
+        });
+
+        // 3. Save strapping
         await fetch(`https://tank-calibration-app.onrender.com/strapping/${editingTankId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ courses })
         });
 
-        // 3. Save deadwood
+        // 4. Save course heights
+        await fetch(`https://tank-calibration-app.onrender.com/tanks/${editingTankId}/courses`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courses: courseHeights })
+        });
+
+        // 5. Save deadwood
         let deadwood = { horizontal: [], vertical: [] };
         try { deadwood = getDeadwoodData('editDeadwoodSection'); } catch (e) {}
         await fetch(`https://tank-calibration-app.onrender.com/deadwood/${editingTankId}`, {

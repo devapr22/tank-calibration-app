@@ -60,6 +60,38 @@
 
         <div id="deadwoodSection" style="display:none; margin-top:12px;"></div>
 
+        <div id="tankDetailsSection" style="display:none; margin-top:20px;">
+            <h3>Tank Details</h3>
+            <div class="tank-detail-fields" style="display:flex; gap:30px; flex-wrap:wrap; margin:12px 0 18px;">
+                <div>
+                    <label style="display:block; margin-bottom:6px;">Datum Height</label>
+                    <input type="number" step="any" id="datumHeight" class="tank-detail-input" placeholder="Datum Height">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:6px;">Datum Volume</label>
+                    <input type="number" step="any" id="datumVolume" class="tank-detail-input" placeholder="Datum Volume">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:6px;">Crown Height</label>
+                    <input type="number" step="any" id="crownHeight" class="tank-detail-input" placeholder="Crown Height">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:6px;">Crown Volume</label>
+                    <input type="number" step="any" id="crownVolume" class="tank-detail-input" placeholder="Crown Volume">
+                </div>
+            </div>
+            <h4 style="margin-top:16px;">Course Heights</h4>
+            <table class="deadwood-table" id="courseHeightTable">
+                <thead>
+                    <tr>
+                        <th>Course Number</th>
+                        <th>Course Height (cm)</th>
+                    </tr>
+                </thead>
+                <tbody id="courseHeightTableBody"></tbody>
+            </table>
+        </div>
+
         <button id="saveTankButton" onclick="saveTank()" style="display:none; margin-top: 10px;">Save Tank</button>
     </div>
 
@@ -72,6 +104,37 @@
             <label>Tank Number</label>
             <input type="text" id="editTankNumber" placeholder="Tank Number">
             <div id="editCourseInputs"></div>
+            <div id="editTankDetailsSection" style="display:none; margin-top:20px;">
+                <h3>Tank Details</h3>
+                <div class="tank-detail-fields" style="display:flex; gap:30px; flex-wrap:wrap; margin:12px 0 18px;">
+                    <div>
+                        <label style="display:block; margin-bottom:6px;">Datum Height</label>
+                        <input type="number" step="any" id="editDatumHeight" class="tank-detail-input" placeholder="Datum Height">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:6px;">Datum Volume</label>
+                        <input type="number" step="any" id="editDatumVolume" class="tank-detail-input" placeholder="Datum Volume">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:6px;">Crown Height</label>
+                        <input type="number" step="any" id="editCrownHeight" class="tank-detail-input" placeholder="Crown Height">
+                    </div>
+                    <div>
+                        <label style="display:block; margin-bottom:6px;">Crown Volume</label>
+                        <input type="number" step="any" id="editCrownVolume" class="tank-detail-input" placeholder="Crown Volume">
+                    </div>
+                </div>
+                <h4 style="margin-top:16px;">Course Heights</h4>
+                <table class="deadwood-table" id="editCourseHeightTable">
+                    <thead>
+                        <tr>
+                            <th>Course Number</th>
+                            <th>Course Height (cm)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="editCourseHeightTableBody"></tbody>
+                </table>
+            </div>
             <p>
                 <button onclick="toggleEditDeadwood()" id="toggleEditDeadwoodBtn" style="margin-top:10px;">Show Deadwood</button>
             </p>
