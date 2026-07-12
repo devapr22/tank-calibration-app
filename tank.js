@@ -744,7 +744,7 @@ function renderDeadwoodSection(containerId, existing = null) {
             <thead>
                 <tr>
                     <th>Method</th>
-                    <th>Cross sectional area (cm)</th>
+                    <th class="vw-area-header">Cross sectional area (cm)</th>
                     <th>Height start from (cm)</th>
                     <th>Length (cm)</th>
                     <th>Deadwood name</th>
@@ -774,12 +774,13 @@ function renderDeadwoodSection(containerId, existing = null) {
     // Trigger initial calculations for existing rows
     hRows.forEach(tr => calculateHorizontalDeadwood(tr));
     vRows.forEach(tr => calculateVerticalDeadwood(tr));
+    syncVerticalAreaColumnVisibility(container.querySelector(`#${containerId}-vertical`));
 }
 
 function horizontalRowHtml(containerId, row = {}) {
-    const h1 = row.heightStart ?? '';
-    const h2 = row.heightEnd ?? '';
-    const length = row.length ?? '';
+    const h1 = row.heightStart !== undefined && row.heightStart !== '' ? parseFloat(row.heightStart).toFixed(2) : '';
+    const h2 = row.heightEnd !== undefined && row.heightEnd !== '' ? parseFloat(row.heightEnd).toFixed(2) : '';
+    const length = row.length !== undefined && row.length !== '' ? parseFloat(row.length).toFixed(2) : '';
     const name = row.name ?? '';
     const volume = row.volume ?? '';
     const lper = row.litrePerCm ?? '';
@@ -798,15 +799,16 @@ function horizontalRowHtml(containerId, row = {}) {
 }
 
 function verticalRowHtml(containerId, row = {}) {
-    const method = row.method ?? 'automatic';
+    const method = row.method ?? 'manual';
     const area = row.area ?? '';
-    const hstart = row.heightStart ?? '';
-    const length = row.length ?? '';
+    const hstart = row.heightStart !== undefined && row.heightStart !== '' ? parseFloat(row.heightStart).toFixed(2) : '';
+    const length = row.length !== undefined && row.length !== '' ? parseFloat(row.length).toFixed(2) : '';
     const name = row.name ?? '';
     const volume = row.volume ?? '';
     const lper = row.litrePerCm ?? '';
 
     const isManual = method === 'manual';
+    const areaHidden = isManual ? 'style="display:none;"' : '';
     const areaDisabled = isManual ? 'disabled style="background:#f0f0f0; color:#999;"' : '';
     const volumeReadonly = isManual ? '' : 'readonly';
     const volumeBg = isManual ? '' : 'style="background:#f0f0f0;"';
@@ -815,11 +817,11 @@ function verticalRowHtml(containerId, row = {}) {
         <tr>
             <td>
                 <select class="vw-method" onchange="onVerticalMethodChange(this)">
-                    <option value="automatic" ${method === 'automatic' ? 'selected' : ''}>Automatic</option>
                     <option value="manual" ${method === 'manual' ? 'selected' : ''}>Manual</option>
+                    <option value="automatic" ${method === 'automatic' ? 'selected' : ''}>Automatic</option>
                 </select>
             </td>
-            <td><input type="number" step="any" class="vw-area" value="${area}" ${areaDisabled}></td>
+            <td class="vw-area-cell" ${areaHidden}><input type="number" step="any" class="vw-area" value="${area}" ${areaDisabled}></td>
             <td><input type="number" step="any" class="vw-height-start" value="${hstart}"></td>
             <td><input type="number" step="any" class="vw-length" value="${length}"></td>
             <td><input type="text" class="vw-name" value="${name}"></td>
@@ -877,27 +879,86 @@ function addVerticalRow(containerId) {
     attachVerticalRowListeners(newRow);
 }
 
+function syncVerticalAreaColumnVisibility(table) {
+    if (!table) return;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    const anyAutomatic = rows.some(tr => {
+        const methodSelect = tr.querySelector('.vw-method');
+        return methodSelect ? methodSelect.value === 'automatic' : false;
+    });
+
+    const header = table.querySelector('.vw-area-header');
+    if (header) header.style.display = anyAutomatic ? '' : 'none';
+
+    rows.forEach(tr => {
+        const methodSelect = tr.querySelector('.vw-method');
+        const areaCell = tr.querySelector('.vw-area-cell');
+        const areaInput = tr.querySelector('.vw-area');
+        const volumeInput = tr.querySelector('.vw-volume');
+        const isManual = methodSelect ? methodSelect.value === 'manual' : true;
+
+        if (areaCell) areaCell.style.display = isManual ? 'none' : '';
+
+        if (isManual) {
+            if (areaInput) {
+                areaInput.disabled = true;
+                areaInput.style.background = '#f0f0f0';
+                areaInput.style.color = '#999';
+                areaInput.value = '';
+            }
+            if (volumeInput) {
+                volumeInput.removeAttribute('readonly');
+                volumeInput.style.background = '';
+            }
+        } else {
+            if (areaInput) {
+                areaInput.disabled = false;
+                areaInput.style.background = '';
+                areaInput.style.color = '';
+            }
+            if (volumeInput) {
+                volumeInput.setAttribute('readonly', true);
+                volumeInput.style.background = '#f0f0f0';
+                volumeInput.value = '';
+            }
+        }
+    });
+}
+
 function onVerticalMethodChange(select) {
     const tr = select.closest('tr');
+    const table = select.closest('table');
     const isManual = select.value === 'manual';
     const areaInput = tr.querySelector('.vw-area');
     const volumeInput = tr.querySelector('.vw-volume');
+    
     if (isManual) {
-        areaInput.disabled = true;
-        areaInput.style.background = '#f0f0f0';
-        areaInput.style.color = '#999';
-        areaInput.value = '';
-        volumeInput.removeAttribute('readonly');
-        volumeInput.style.background = '';
-        volumeInput.value = '';
+        // Switching TO manual: disable area, enable volume (preserve value)
+        if (areaInput) {
+            areaInput.disabled = true;
+            areaInput.style.background = '#f0f0f0';
+            areaInput.style.color = '#999';
+            areaInput.value = '';
+        }
+        if (volumeInput) {
+            volumeInput.removeAttribute('readonly');
+            volumeInput.style.background = '';
+        }
     } else {
-        areaInput.disabled = false;
-        areaInput.style.background = '';
-        areaInput.style.color = '';
-        volumeInput.setAttribute('readonly', true);
-        volumeInput.style.background = '#f0f0f0';
-        volumeInput.value = '';
+        // Switching TO automatic: enable area, make volume readonly and recalculate
+        if (areaInput) {
+            areaInput.disabled = false;
+            areaInput.style.background = '';
+            areaInput.style.color = '';
+        }
+        if (volumeInput) {
+            volumeInput.setAttribute('readonly', true);
+            volumeInput.style.background = '#f0f0f0';
+            volumeInput.value = '';
+        }
     }
+    syncVerticalAreaColumnVisibility(table);
     calculateVerticalDeadwood(tr);
 }
 

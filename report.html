@@ -132,11 +132,10 @@
 
         <table class="report-table">
             <thead>
-                <tr><td colspan="6" class="section-title">Vertical Deadwoods</td></tr>
+                <tr><td colspan="5" class="section-title">Vertical Deadwoods</td></tr>
                 <tr>
                     <th>Start Height [cm]</th>
                     <th>Length [cm]</th>
-                    <th>Area</th>
                     <th>Deadwood Name</th>
                     <th>Volume [litre]</th>
                     <th>litre/cm</th>
@@ -343,9 +342,9 @@ function renderDeadwoods(data) {
         data.horizontal.forEach(r => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${r.height_start}</td>
-                <td>${r.height_end}</td>
-                <td>${r.length}</td>
+                <td>${parseFloat(r.height_start || 0).toFixed(2)}</td>
+                <td>${parseFloat(r.height_end || 0).toFixed(2)}</td>
+                <td>${parseFloat(r.length || 0).toFixed(2)}</td>
                 <td>${r.name || ''}</td>
                 <td>${parseFloat(r.volume || 0).toFixed(3)}</td>
                 <td>${parseFloat(r.litre_per_cm || 0).toFixed(3)}</td>
@@ -365,9 +364,8 @@ function renderDeadwoods(data) {
         data.vertical.forEach(r => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${r.height_start}</td>
-                <td>${r.length}</td>
-                <td>${r.area || ''}</td>
+                <td>${parseFloat(r.height_start || 0).toFixed(2)}</td>
+                <td>${parseFloat(r.length || 0).toFixed(2)}</td>
                 <td>${r.name || ''}</td>
                 <td>${parseFloat(r.volume || 0).toFixed(3)}</td>
                 <td>${parseFloat(r.litre_per_cm || 0).toFixed(3)}</td>
